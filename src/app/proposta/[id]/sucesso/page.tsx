@@ -11,22 +11,13 @@ import { Button } from "@/components/ui/button";
 export default function PropostaSucessoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
-  const { data: proposta } = useQuery({
-    queryKey: ["proposta", id],
-    queryFn: () => dbService.getPropostaById(id),
+  const { data } = useQuery({
+    queryKey: ["public-proposta", id],
+    queryFn: () => dbService.getPublicPropostaWithCliente(id),
   });
 
-  const { data: clientes = [] } = useQuery({
-    queryKey: ["clientes"],
-    queryFn: dbService.getClientes,
-  });
-
-  const client = proposalLoadedClient();
-
-  function proposalLoadedClient() {
-    if (!proposta) return null;
-    return clientes.find((c) => c.id === proposta.cliente_id) || null;
-  }
+  const proposta = data?.proposta;
+  const client = data?.cliente;
 
   const clientName = client ? client.empresa : "sua empresa";
 

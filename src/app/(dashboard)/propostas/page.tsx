@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
-import { Proposta } from "@/lib/db-mock";
+import { Proposta } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -326,12 +326,14 @@ export default function PropostasPage() {
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-white">
-                              <span className="sr-only">Abrir menu</span>
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-white">
+                                <span className="sr-only">Abrir menu</span>
+                                <MoreHorizontal className="size-4" />
+                              </Button>
+                            }
+                          />
                           <DropdownMenuContent align="end" className="bg-[#1c1c1e] border border-zinc-800 text-zinc-200">
                             <DropdownMenuItem
                               onClick={() => handleCopyLink(proposta.id)}
@@ -340,14 +342,12 @@ export default function PropostasPage() {
                               <Link2 className="size-3.5" />
                               Copiar Link de Aceite
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={`/proposta/${proposta.id}`}
-                                className="focus:bg-[#09A3E9]/10 focus:text-white cursor-pointer gap-2 flex items-center"
-                              >
-                                <Eye className="size-3.5" />
-                                Visualizar Proposta
-                              </Link>
+                            <DropdownMenuItem
+                              onClick={() => window.open(`/proposta/${proposta.id}`, "_blank")}
+                              className="focus:bg-[#09A3E9]/10 focus:text-white cursor-pointer gap-2"
+                            >
+                              <Eye className="size-3.5" />
+                              Visualizar Proposta
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => openEditModal(proposta)}
@@ -391,7 +391,7 @@ export default function PropostasPage() {
             <div className="grid gap-4 py-4">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="cliente" className="text-zinc-300 text-xs">Nome do cliente *</Label>
-                <Select value={clienteId} onValueChange={setClienteId} required>
+                <Select value={clienteId} onValueChange={(v) => v && setClienteId(v)} required>
                   <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white text-sm">
                     <SelectValue placeholder="Selecione um cliente" />
                   </SelectTrigger>

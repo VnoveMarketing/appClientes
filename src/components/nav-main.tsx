@@ -31,7 +31,9 @@ export function NavMain({ items }: { items: NavItem[] }) {
           return (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
-                asChild
+                render={
+                  <Link href={item.url} className="flex items-center gap-3" />
+                }
                 isActive={isActive}
                 tooltip={item.title}
                 className={`transition-colors duration-200 ${
@@ -40,10 +42,8 @@ export function NavMain({ items }: { items: NavItem[] }) {
                     : "text-zinc-400 hover:text-white hover:bg-zinc-800"
                 }`}
               >
-                <Link href={item.url} className="flex items-center gap-3">
-                  <Icon className={`size-5 ${isActive ? "text-[#09A3E9]" : "text-zinc-400 group-hover:text-white"}`} />
-                  <span className="font-medium">{item.title}</span>
-                </Link>
+                <Icon className={`size-5 ${isActive ? "text-[#09A3E9]" : "text-zinc-400 group-hover:text-white"}`} />
+                <span className="font-medium">{item.title}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           )

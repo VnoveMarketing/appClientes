@@ -7,21 +7,32 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Lock, Mail, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("agencia@vnove.com.br");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate login
-    setTimeout(() => {
-      setIsLoading(false);
-      router.push("/clientes");
-    }, 800);
+    setErrorMsg("");
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    setIsLoading(false);
+
+    if (error) {
+      setErrorMsg("Credenciais inválidas. Verifique e-mail e senha.");
+      return;
+    }
+
+    router.push("/clientes");
+    router.refresh();
   };
 
   return (
@@ -43,6 +54,12 @@ export default function LoginPage() {
 
         <CardContent className="p-0">
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            {errorMsg && (
+              <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md px-3 py-2">
+                {errorMsg}
+              </p>
+            )}
+
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email" className="text-zinc-400 text-xs flex items-center gap-1.5">
                 <Mail className="size-3.5 text-zinc-500" /> E-mail
@@ -53,7 +70,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="agencia@vnove.com.br"
+                placeholder="Digite seu e-mail"
                 className="bg-zinc-900 border-zinc-800 text-white text-sm"
               />
             </div>

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
-import { Contrato, Proposta } from "@/lib/db-mock";
+import { Contrato, Proposta } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -348,7 +348,11 @@ export default function ContratosPage() {
             <div className="grid gap-4 py-4">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="proposta" className="text-zinc-300 text-xs">Proposta Aceita *</Label>
-                <Select value={selectedPropostaId} onValueChange={handlePropostaChange} required>
+                <Select
+                  value={selectedPropostaId}
+                  onValueChange={(value) => value && handlePropostaChange(value)}
+                  required
+                >
                   <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white text-sm">
                     <SelectValue placeholder="Selecione uma proposta aceita" />
                   </SelectTrigger>

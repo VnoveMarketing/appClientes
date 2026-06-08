@@ -23,39 +23,19 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
   const [signatureMode, setSignatureMode] = useState<"draw" | "type">("draw");
 
   // Tanstack Queries
-  const { data: contrato, isLoading, error } = useQuery({
-    queryKey: ["contrato", id],
-    queryFn: () => dbService.getContratoById(id),
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["public-contrato", id],
+    queryFn: () => dbService.getPublicContratoWithCliente(id),
   });
 
-  const { data: clientes = [] } = useQuery({
-    queryKey: ["clientes"],
-    queryFn: dbService.getClientes,
-  });
-
-  const client = contractLoadedClient();
-
-  function contractLoadedClient() {
-    if (!contrato) return null;
-    return clientes.find((c) => c.id === contrato.cliente_id) || null;
-  }
+  const contrato = data?.contrato;
+  const client = data?.cliente;
 
   // Mutation to sign
   const signMutation = useMutation({
     mutationFn: async () => {
-      if (!contrato || !client) return;
-
-      // 1. Update contract to 'assinado'
-      await dbService.updateContrato(contrato.id, {
-        status: "assinado",
-        assinado_em: new Date().toISOString(),
-      });
-
-      // 2. Update client to status: 'Ativa' and assinatura: 'active'
-      await dbService.updateCliente(client.id, {
-        status: "Ativa",
-        assinatura: "active",
-      });
+      if (!contrato) return;
+      await dbService.signPublicContrato(contrato.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contrato", id] });

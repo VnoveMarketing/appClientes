@@ -20,15 +20,13 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
   const { id } = use(params);
 
   // Tanstack Queries
-  const { data: proposta, isLoading, error } = useQuery({
-    queryKey: ["proposta", id],
-    queryFn: () => dbService.getPropostaById(id),
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["public-proposta", id],
+    queryFn: () => dbService.getPublicPropostaWithCliente(id),
   });
 
-  const { data: clientes = [] } = useQuery({
-    queryKey: ["clientes"],
-    queryFn: dbService.getClientes,
-  });
+  const proposta = data?.proposta;
+  const client = data?.cliente;
 
   if (isLoading) {
     return (
@@ -55,7 +53,6 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const client = clientes.find((c) => c.id === proposta.cliente_id);
   const clientName = client ? client.empresa : "Empresa Cliente";
 
   // Helper format

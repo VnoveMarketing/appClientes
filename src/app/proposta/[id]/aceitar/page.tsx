@@ -27,22 +27,13 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
   const [responsavelLegal, setResponsavelLegal] = useState("");
 
   // Tanstack Queries
-  const { data: proposta, isLoading, error } = useQuery({
-    queryKey: ["proposta", id],
-    queryFn: () => dbService.getPropostaById(id),
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["public-proposta", id],
+    queryFn: () => dbService.getPublicPropostaWithCliente(id),
   });
 
-  const { data: clientes = [] } = useQuery({
-    queryKey: ["clientes"],
-    queryFn: dbService.getClientes,
-  });
-
-  const client = proposalLoadedClient();
-
-  function proposalLoadedClient() {
-    if (!proposta) return null;
-    return clientes.find((c) => c.id === proposta.cliente_id) || null;
-  }
+  const proposta = data?.proposta;
+  const client = data?.cliente;
 
   // Effect to pre-populate from client initial data
   React.useEffect(() => {
@@ -57,7 +48,6 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
   // Mutation to accept proposal & update client details
   const acceptMutation = useMutation({
     mutationFn: async (payload: {
-      clienteId: string;
       clientUpdates: {
         empresa: string;
         email: string;
@@ -69,10 +59,7 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
         nome: string;
       };
     }) => {
-      // 1. Update client detailed registration data
-      await dbService.updateCliente(payload.clienteId, payload.clientUpdates);
-      // 2. Update proposal status to 'aceita'
-      await dbService.updateProposta(id, { status: "aceita" });
+      await dbService.acceptPublicProposta(id, payload.clientUpdates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["proposta", id] });
@@ -105,7 +92,6 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     acceptMutation.mutate({
-      clienteId: client.id,
       clientUpdates: {
         empresa: empresaNome,
         email: emailCorporativo,

@@ -6,6 +6,7 @@ import { Users, FileText, FileCheck } from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { TeamSwitcher } from "@/components/team-switcher"
+import { useAuthUser } from "@/hooks/use-auth"
 import {
   Sidebar,
   SidebarContent,
@@ -14,12 +15,13 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 
+const defaultUser = {
+  name: "",
+  email: "",
+  avatar: "",
+};
+
 const data = {
-  user: {
-    name: "Administrador V9",
-    email: "agencia@vnove.com.br",
-    avatar: "",
-  },
   teams: [
     {
       name: "Agência V9nove",
@@ -51,6 +53,9 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const authUser = useAuthUser();
+  const user = authUser ?? defaultUser;
+
   return (
     <Sidebar collapsible="icon" className="border-r border-zinc-800 bg-[#0B0B0B]" {...props}>
       <SidebarHeader className="border-b border-zinc-800/50 py-4">
@@ -60,7 +65,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain items={data.navMain} />
       </SidebarContent>
       <SidebarFooter className="border-t border-zinc-800/50 py-4">
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
