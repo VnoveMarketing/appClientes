@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api/auth";
 import { getAdminSupabase } from "@/lib/api/admin-db";
+import { notifyPropostaAceita, notifyContratoProntoAssinatura } from "@/lib/email/notifications";
+import { generateContractFromProposta } from "@/lib/auto-contract";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -43,6 +45,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (clienteError) return errorResponse(clienteError.message, 500);
 
+    const { data: updatedCliente } = await supabase
+      .from("clientes")
+      .select("*")
+      .eq("id", proposta.cliente_id)
+      .single();
+
     const { data: updated, error: updateError } = await supabase
       .from("propostas")
       .update({ status: "aceita" })
@@ -51,7 +59,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .single();
 
     if (updateError) return errorResponse(updateError.message, 500);
-    return jsonResponse(updated);
+
+    notifyPropostaAceita(id, proposta.cliente_id).catch(console.error);
+
+    const contrato = await generateContractFromProposta(
+      supabase,
+      updated,
+      updatedCliente ?? clientUpdates
+    );
+
+    notifyContratoProntoAssinatura(contrato.id, proposta.cliente_id).catch(console.error);
+
+    return jsonResponse({ proposta: updated, contrato });
   } catch (e) {
     return errorResponse(e instanceof Error ? e.message : "Erro interno", 500);
   }

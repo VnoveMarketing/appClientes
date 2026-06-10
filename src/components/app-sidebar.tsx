@@ -6,7 +6,7 @@ import { Users, FileText, FileCheck } from "lucide-react"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { TeamSwitcher } from "@/components/team-switcher"
-import { useAuthUser } from "@/hooks/use-auth"
+import { useAuthUser, canAccessContratos } from "@/hooks/use-auth"
 import {
   Sidebar,
   SidebarContent,
@@ -19,10 +19,37 @@ const defaultUser = {
   name: "",
   email: "",
   avatar: "",
+  roleLabel: "",
 };
 
-const data = {
-  teams: [
+const allNavItems = [
+  {
+    title: "Clientes",
+    url: "/clientes",
+    icon: Users,
+  },
+  {
+    title: "Propostas",
+    url: "/propostas",
+    icon: FileText,
+  },
+  {
+    title: "Contratos",
+    url: "/contratos",
+    icon: FileCheck,
+    requiresContratos: true,
+  },
+];
+
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const authUser = useAuthUser();
+  const user = authUser ?? defaultUser;
+
+  const navMain = allNavItems.filter(
+    (item) => !item.requiresContratos || canAccessContratos(authUser?.role)
+  );
+
+  const teams = [
     {
       name: "Agência V9nove",
       logo: (
@@ -30,39 +57,17 @@ const data = {
           9
         </div>
       ),
-      plan: "Portal Interno",
+      plan: authUser?.roleLabel ?? "Portal Interno",
     }
-  ],
-  navMain: [
-    {
-      title: "Clientes",
-      url: "/clientes",
-      icon: Users,
-    },
-    {
-      title: "Propostas",
-      url: "/propostas",
-      icon: FileText,
-    },
-    {
-      title: "Contratos",
-      url: "/contratos",
-      icon: FileCheck,
-    },
-  ],
-}
-
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const authUser = useAuthUser();
-  const user = authUser ?? defaultUser;
+  ];
 
   return (
     <Sidebar collapsible="icon" className="border-r border-zinc-800 bg-[#0B0B0B]" {...props}>
       <SidebarHeader className="border-b border-zinc-800/50 py-4">
-        <TeamSwitcher teams={data.teams} />
+        <TeamSwitcher teams={teams} />
       </SidebarHeader>
       <SidebarContent className="py-4">
-        <NavMain items={data.navMain} />
+        <NavMain items={navMain} />
       </SidebarContent>
       <SidebarFooter className="border-t border-zinc-800/50 py-4">
         <NavUser user={user} />

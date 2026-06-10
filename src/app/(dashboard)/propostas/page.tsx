@@ -4,6 +4,11 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import { Proposta } from "@/lib/types";
+import {
+  normalizeEscopo,
+  type EscopoItemRef,
+  type EscopoItemCatalog,
+} from "@/lib/escopo";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +53,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-const DEFAULT_ESCOPO = [
+const DEFAULT_ESCOPO_NAMES = [
   "CRM",
   "Funis de vendas",
   "Chat ao vivo",
@@ -56,6 +61,15 @@ const DEFAULT_ESCOPO = [
   "Automação de fluxos",
   "Integrações",
 ];
+
+function buildDefaultEscopo(catalog: EscopoItemCatalog[]): EscopoItemRef[] {
+  return DEFAULT_ESCOPO_NAMES.map((nome) => {
+    const found = catalog.find((c) => c.nome === nome);
+    return found
+      ? { nome: found.nome, descricao: found.descricao, escopo_item_id: found.id }
+      : { nome, descricao: "" };
+  });
+}
 
 export default function PropostasPage() {
   const queryClient = useQueryClient();
@@ -70,8 +84,11 @@ export default function PropostasPage() {
   const [descontoMensalidade, setDescontoMensalidade] = useState("0");
   const [duracao, setDuracao] = useState("12");
   const [condicaoDescricao, setCondicaoDescricao] = useState("");
-  const [escopo, setEscopo] = useState<string[]>(DEFAULT_ESCOPO);
-  const [novoItemEscopo, setNovoItemEscopo] = useState("");
+  const [escopo, setEscopo] = useState<EscopoItemRef[]>([]);
+  const [escopoDescricaoAdicional, setEscopoDescricaoAdicional] = useState("");
+  const [novoItemNome, setNovoItemNome] = useState("");
+  const [novaItemDescricao, setNovaItemDescricao] = useState("");
+  const [isAddingEscopo, setIsAddingEscopo] = useState(false);
 
   // TanStack Query fetching
   const { data: propostas = [], isLoading } = useQuery({
@@ -83,6 +100,16 @@ export default function PropostasPage() {
     queryKey: ["clientes"],
     queryFn: dbService.getClientes,
   });
+
+  const { data: escopoCatalog = [] } = useQuery({
+    queryKey: ["escopo-itens"],
+    queryFn: dbService.getEscopoItens,
+  });
+
+  const selectedCliente = clientes.find((c) => c.id === clienteId);
+  const clienteLabel = selectedCliente
+    ? `${selectedCliente.empresa} (${selectedCliente.nome})`
+    : null;
 
   // Mutations
   const addMutation = useMutation({
@@ -121,8 +148,10 @@ export default function PropostasPage() {
     setDescontoMensalidade("0");
     setDuracao("12");
     setCondicaoDescricao("");
-    setEscopo([...DEFAULT_ESCOPO]);
-    setNovoItemEscopo("");
+    setEscopo(buildDefaultEscopo(escopoCatalog));
+    setEscopoDescricaoAdicional("");
+    setNovoItemNome("");
+    setNovaItemDescricao("");
     setIsModalOpen(true);
   };
 
@@ -135,8 +164,10 @@ export default function PropostasPage() {
     setDescontoMensalidade(proposta.desconto_mensalidade.toString());
     setDuracao(proposta.duracao.toString());
     setCondicaoDescricao(proposta.condicao_descricao || "");
-    setEscopo([...proposta.escopo]);
-    setNovoItemEscopo("");
+    setEscopo(normalizeEscopo(proposta.escopo));
+    setEscopoDescricaoAdicional(proposta.escopo_descricao_adicional ?? "");
+    setNovoItemNome("");
+    setNovaItemDescricao("");
     setIsModalOpen(true);
   };
 
@@ -144,10 +175,29 @@ export default function PropostasPage() {
     setIsModalOpen(false);
   };
 
-  const handleAddEscopoItem = () => {
-    if (novoItemEscopo.trim()) {
-      setEscopo([...escopo, novoItemEscopo.trim()]);
-      setNovoItemEscopo("");
+  const handleAddEscopoItem = async () => {
+    if (!novoItemNome.trim()) return;
+
+    setIsAddingEscopo(true);
+    try {
+      const saved = await dbService.addEscopoItem({
+        nome: novoItemNome.trim(),
+        descricao: novaItemDescricao.trim(),
+      });
+
+      setEscopo([
+        ...escopo,
+        {
+          nome: saved.nome,
+          descricao: saved.descricao,
+          escopo_item_id: saved.id,
+        },
+      ]);
+      setNovoItemNome("");
+      setNovaItemDescricao("");
+      queryClient.invalidateQueries({ queryKey: ["escopo-itens"] });
+    } finally {
+      setIsAddingEscopo(false);
     }
   };
 
@@ -166,7 +216,8 @@ export default function PropostasPage() {
       desconto_mensalidade: parseFloat(descontoMensalidade),
       duracao: parseInt(duracao),
       condicao_descricao: condicaoDescricao,
-      escopo: escopo,
+      escopo,
+      escopo_descricao_adicional: escopoDescricaoAdicional,
       status: (selectedProposta ? selectedProposta.status : "pendente") as any,
     };
 
@@ -377,7 +428,7 @@ export default function PropostasPage() {
 
       {/* Add/Edit Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="bg-[#161616] border border-zinc-800 text-white max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-xl) max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-white">
@@ -392,8 +443,10 @@ export default function PropostasPage() {
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="cliente" className="text-zinc-300 text-xs">Nome do cliente *</Label>
                 <Select value={clienteId} onValueChange={(v) => v && setClienteId(v)} required>
-                  <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white text-sm">
-                    <SelectValue placeholder="Selecione um cliente" />
+                  <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-white text-sm">
+                    <SelectValue placeholder="Selecione um cliente">
+                      {clienteLabel}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
                     {clientes.map((c) => (
@@ -495,49 +548,81 @@ export default function PropostasPage() {
               </div>
 
               <div className="border-t border-zinc-800/80 my-2 pt-3">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-white">Escopo da Solução</h3>
-                    <p className="text-xs text-zinc-400">Itens incluídos na proposta</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Novo item"
-                      value={novoItemEscopo}
-                      onChange={(e) => setNovoItemEscopo(e.target.value)}
-                      className="bg-zinc-900 border-zinc-800 text-white text-xs h-8 w-40"
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleAddEscopoItem}
-                      size="sm"
-                      className="h-8 bg-zinc-850 hover:bg-zinc-800 text-white text-xs border border-zinc-800"
-                    >
-                      + Adicionar item
-                    </Button>
-                  </div>
+                <div className="mb-3">
+                  <h3 className="text-sm font-semibold text-white">Escopo da Solução</h3>
+                  <p className="text-xs text-zinc-400">Itens incluídos na proposta e no contrato</p>
                 </div>
 
-                <div className="grid gap-2 border border-zinc-800 rounded-lg p-3 bg-zinc-950">
+                <div className="grid gap-3 mb-4 p-3 border border-zinc-800 rounded-lg bg-zinc-950">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-zinc-300 text-xs">Nome do item *</Label>
+                    <Input
+                      placeholder="Ex: CRM, Integrações..."
+                      value={novoItemNome}
+                      onChange={(e) => setNovoItemNome(e.target.value)}
+                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-zinc-300 text-xs">Descrição do entregável</Label>
+                    <textarea
+                      placeholder="Descreva o que está incluso neste item..."
+                      value={novaItemDescricao}
+                      onChange={(e) => setNovaItemDescricao(e.target.value)}
+                      rows={3}
+                      className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleAddEscopoItem}
+                    disabled={isAddingEscopo || !novoItemNome.trim()}
+                    size="sm"
+                    className="w-fit bg-zinc-800 hover:bg-zinc-700 text-white text-xs border border-zinc-700"
+                  >
+                    {isAddingEscopo ? "Salvando..." : "+ Adicionar item ao escopo"}
+                  </Button>
+                </div>
+
+                <div className="grid gap-2 border border-zinc-800 rounded-lg p-3 bg-zinc-950 mb-4">
                   {escopo.map((item, idx) => (
                     <div
-                      key={idx}
-                      className="flex items-center justify-between bg-zinc-900 border border-zinc-800/80 rounded px-3 py-1.5"
+                      key={`${item.nome}-${idx}`}
+                      className="flex items-start justify-between bg-zinc-900 border border-zinc-800/80 rounded px-3 py-2"
                     >
-                      <div className="flex items-center gap-2">
-                        <Menu className="size-3 text-zinc-650 cursor-grab" />
-                        <span className="text-xs text-zinc-300">{item}</span>
+                      <div className="flex items-start gap-2 flex-1 min-w-0">
+                        <Menu className="size-3 text-zinc-500 mt-1 shrink-0" />
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="text-xs font-semibold text-zinc-200">{item.nome}</span>
+                          {item.descricao ? (
+                            <span className="text-[11px] text-zinc-500 leading-relaxed">{item.descricao}</span>
+                          ) : null}
+                        </div>
                       </div>
                       <Button
                         type="button"
                         variant="ghost"
                         onClick={() => handleRemoveEscopoItem(idx)}
-                        className="h-6 w-6 p-0 text-zinc-500 hover:text-rose-400"
+                        className="h-6 w-6 p-0 text-zinc-500 hover:text-rose-400 shrink-0"
                       >
                         <Trash className="size-3" />
                       </Button>
                     </div>
                   ))}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="escopoDescricaoAdicional" className="text-zinc-300 text-xs">
+                    Descrição adicional do escopo (opcional)
+                  </Label>
+                  <textarea
+                    id="escopoDescricaoAdicional"
+                    value={escopoDescricaoAdicional}
+                    onChange={(e) => setEscopoDescricaoAdicional(e.target.value)}
+                    placeholder="Detalhes gerais do escopo que aparecerão na cláusula primeira do contrato..."
+                    rows={3}
+                    className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
+                  />
                 </div>
               </div>
             </div>

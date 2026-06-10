@@ -1,5 +1,5 @@
 import { apiClient } from "./api-client";
-import { Cliente, Proposta, Contrato } from "./types";
+import { Cliente, Proposta, Contrato, EscopoItemCatalog } from "./types";
 
 export type { Cliente, Proposta, Contrato };
 
@@ -40,4 +40,9 @@ export const dbService = {
   getPublicContratoWithCliente: (id: string) => apiClient.getPublicContratoById(id),
   getPublicClienteForContrato: (id: string) => apiClient.getPublicClienteForContrato(id),
   signPublicContrato: (id: string) => apiClient.signPublicContrato(id),
+
+  getEscopoItens: (): Promise<EscopoItemCatalog[]> => apiClient.getEscopoItens(),
+  addEscopoItem: (item: { nome: string; descricao: string }): Promise<EscopoItemCatalog> =>
+    apiClient.addEscopoItem(item),
+  extractCartaoSocial: (file: string) => apiClient.extractCartaoSocial(file),
 };

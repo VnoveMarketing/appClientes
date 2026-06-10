@@ -1,5 +1,7 @@
 // Mock Database saved in LocalStorage for offline/sandbox testing
 
+import type { EscopoItemRef } from "./escopo";
+
 export interface Cliente {
   id: string;
   nome: string;
@@ -25,7 +27,8 @@ export interface Proposta {
   desconto_mensalidade: number; // 0 to 100
   duracao: number; // months
   condicao_descricao: string;
-  escopo: string[];
+  escopo: EscopoItemRef[] | string[];
+  escopo_descricao_adicional?: string;
   status: 'pendente' | 'aceita' | 'em_analise' | 'contrato_gerado';
   created_at: string;
 }

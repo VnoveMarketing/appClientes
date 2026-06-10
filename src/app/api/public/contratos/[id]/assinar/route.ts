@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api/auth";
 import { getAdminSupabase } from "@/lib/api/admin-db";
+import { notifyContratoAssinado } from "@/lib/email/notifications";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -40,6 +41,8 @@ export async function PATCH(_request: NextRequest, context: RouteContext) {
       .eq("id", contrato.cliente_id);
 
     if (clienteError) return errorResponse(clienteError.message, 500);
+
+    notifyContratoAssinado(id, contrato.cliente_id).catch(console.error);
 
     return jsonResponse(updated);
   } catch (e) {

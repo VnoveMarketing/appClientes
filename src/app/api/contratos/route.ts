@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
-import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { requireContratosAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { notifyContratoProntoAssinatura } from "@/lib/email/notifications";
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireContratosAccess();
   if ("error" in auth) return auth.error;
 
   const { data, error } = await auth.supabase
@@ -15,7 +16,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireContratosAccess();
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
@@ -50,5 +51,8 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return errorResponse(error.message, 500);
+
+  notifyContratoProntoAssinatura(data.id, data.cliente_id).catch(console.error);
+
   return jsonResponse(data, 201);
 }

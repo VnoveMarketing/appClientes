@@ -41,6 +41,22 @@ export async function updateSession(request: NextRequest) {
   if (isProtected && !user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
+
+  if (isProtected && user && pathname.startsWith("/contratos")) {
+    const userId = user.sub as string | undefined;
+    if (userId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profile?.role === "consultor") {
+        return NextResponse.redirect(new URL("/clientes", request.url));
+      }
+    }
+  }
+
   if (isAuthPage && user) {
     return NextResponse.redirect(new URL("/clientes", request.url));
   }

@@ -1,4 +1,4 @@
-import type { Cliente, Proposta, Contrato } from "./types";
+import type { Cliente, Proposta, Contrato, EscopoItemCatalog } from "./types";
 
 type PublicPropostaResponse = { proposta: Proposta; cliente: Cliente | null };
 type PublicContratoResponse = { contrato: Contrato; cliente: Cliente | null };
@@ -160,4 +160,30 @@ export const apiClient = {
 
   signPublicContrato: (id: string): Promise<Contrato> =>
     apiFetch(`/api/public/contratos/${id}/assinar`, { method: "PATCH" }),
+
+  // ESCOPO
+  getEscopoItens: (): Promise<EscopoItemCatalog[]> =>
+    apiFetch("/api/escopo-itens"),
+
+  addEscopoItem: (item: { nome: string; descricao: string }): Promise<EscopoItemCatalog> =>
+    apiFetch("/api/escopo-itens", {
+      method: "POST",
+      body: JSON.stringify(item),
+    }),
+
+  // AI
+  extractCartaoSocial: (file: string) =>
+    apiFetch<{
+      empresa?: string;
+      cnpj?: string;
+      email?: string;
+      telefone?: string;
+      cidade?: string;
+      estado?: string;
+      ramo_atividade?: string;
+      nome?: string;
+    }>("/api/public/extract-cartao-social", {
+      method: "POST",
+      body: JSON.stringify({ file }),
+    }),
 };

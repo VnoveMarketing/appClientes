@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { requireClientesAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireClientesAccess();
   if ("error" in auth) return auth.error;
 
   const { data, error } = await auth.supabase
@@ -15,7 +15,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireClientesAccess();
   if ("error" in auth) return auth.error;
 
   const body = await request.json();

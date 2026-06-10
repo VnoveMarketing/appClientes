@@ -4,6 +4,11 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import { Contrato, Proposta } from "@/lib/types";
+import {
+  buildContractContent,
+  buildDetalhesFinanceiros,
+  getContractFinancialValues,
+} from "@/lib/contract-builder";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -106,43 +111,37 @@ export default function ContratosPage() {
     setSelectedPropostaId("");
   };
 
+  const formatBRL = (val: number) => {
+    return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  };
+
+  const getPropostaLabel = (prop: Proposta) => {
+    const client = clientes.find((c) => c.id === prop.cliente_id);
+    return `${client ? client.empresa : "Desconhecido"} - Mensalidade: ${formatBRL(prop.mensalidade)}`;
+  };
+
+  const selectedProposta = propostas.find((p) => p.id === selectedPropostaId);
+  const propostaLabel = selectedProposta ? getPropostaLabel(selectedProposta) : null;
+
   const handlePropostaChange = (propId: string) => {
     setSelectedPropostaId(propId);
     const prop = propostas.find((p) => p.id === propId);
     if (prop) {
-      const discountedSetup = prop.setup - (prop.setup * prop.desconto_setup) / 100;
-      const discountedMensal =
-        prop.mensalidade - (prop.mensalidade * prop.desconto_mensalidade) / 100;
+      const { valor_final_setup, valor_final_mensal } = getContractFinancialValues(prop);
 
-      setFinalSetup(discountedSetup.toString());
-      setFinalMensal(discountedMensal.toString());
-      setDetalhesFinanceiros(
-        prop.condicao_descricao
-          ? `Condição especial aplicada: ${prop.condicao_descricao}`
-          : "Nenhuma condição especial informada."
-      );
+      setFinalSetup(valor_final_setup.toString());
+      setFinalMensal(valor_final_mensal.toString());
+      setDetalhesFinanceiros(buildDetalhesFinanceiros(prop));
 
       const client = clientes.find((c) => c.id === prop.cliente_id);
-      const clientName = client ? client.empresa : "CONTRATANTE";
-
       setConteudoContrato(
-        `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MARKETING DIGITAL\n\n` +
-          `CONTRATANTE: ${clientName.toUpperCase()}\n` +
-          `CONTRATADA: AGÊNCIA MARKETING V9NOVE LTDA\n\n` +
-          `CLÁUSULA PRIMEIRA - DO OBJETO\n` +
-          `O presente contrato tem por objeto a prestação de serviços de marketing digital conforme o seguinte escopo detalhado:\n` +
-          `${prop.escopo.map((item, i) => `  ${i + 1}. ${item}`).join("\n")}\n\n` +
-          `CLÁUSULA SEGUNDA - DOS VALORES E FORMA DE PAGAMENTO\n` +
-          `Pelos serviços contratados, a CONTRATANTE pagará à CONTRATADA:\n` +
-          `a) Valor de Setup (Implantação): R$ ${discountedSetup.toLocaleString("pt-BR", {
-            minimumFractionDigits: 2,
-          })}\n` +
-          `b) Valor Recorrente (Mensalidade): R$ ${discountedMensal.toLocaleString("pt-BR", {
-            minimumFractionDigits: 2,
-          })} mensais pelo período de ${prop.duracao} meses.\n\n` +
-          `CLÁUSULA TERCEIRA - DAS OBRIGAÇÕES\n` +
-          `As partes se obrigam a cumprir mutuamente as cláusulas e condições descritas na proposta oficial e de acordo com a LGPD.\n\n` +
-          `Limeira/SP, ${new Date().toLocaleDateString("pt-BR")}`
+        buildContractContent(prop, {
+          empresa: client?.empresa ?? "CONTRATANTE",
+          cnpj: client?.cnpj,
+          cidade: client?.cidade,
+          estado: client?.estado,
+          nome: client?.nome,
+        })
       );
     }
   };
@@ -167,10 +166,6 @@ export default function ContratosPage() {
     const link = `${window.location.origin}/contrato/${id}`;
     navigator.clipboard.writeText(link);
     alert("Link de assinatura digital copiado:\n" + link);
-  };
-
-  const formatBRL = (val: number) => {
-    return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   };
 
   return (
@@ -333,7 +328,7 @@ export default function ContratosPage() {
 
       {/* Generate Contract Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="bg-[#161616] border border-zinc-800 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-xl) max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
@@ -353,18 +348,17 @@ export default function ContratosPage() {
                   onValueChange={(value) => value && handlePropostaChange(value)}
                   required
                 >
-                  <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white text-sm">
-                    <SelectValue placeholder="Selecione uma proposta aceita" />
+                  <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-white text-sm">
+                    <SelectValue placeholder="Selecione uma proposta aceita">
+                      {propostaLabel}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    {acceptedPropostasWithoutContract.map((p) => {
-                      const client = clientes.find((c) => c.id === p.cliente_id);
-                      return (
+                    {acceptedPropostasWithoutContract.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
-                          {client ? client.empresa : "Desconhecido"} - Mensalidade: {formatBRL(p.mensalidade)}
+                          {getPropostaLabel(p)}
                         </SelectItem>
-                      );
-                    })}
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

@@ -1,11 +1,16 @@
 import { NextRequest } from "next/server";
-import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
+import {
+  requireClientesAccess,
+  requireDeleteAccess,
+  jsonResponse,
+  errorResponse,
+} from "@/lib/api/auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-  const auth = await requireAdmin();
+  const auth = await requireClientesAccess();
   if ("error" in auth) return auth.error;
 
   const { data, error } = await auth.supabase
@@ -21,7 +26,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-  const auth = await requireAdmin();
+  const auth = await requireClientesAccess();
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
@@ -38,7 +43,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
-  const auth = await requireAdmin();
+  const auth = await requireDeleteAccess();
   if ("error" in auth) return auth.error;
 
   const { error } = await auth.supabase.from("clientes").delete().eq("id", id);

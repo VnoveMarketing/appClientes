@@ -25,7 +25,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,9 +42,12 @@ import {
   Eye,
 } from "lucide-react";
 import Link from "next/link";
+import { useAuthUser, canAccessContratos } from "@/hooks/use-auth";
 
 export default function ClientesPage() {
   const queryClient = useQueryClient();
+  const authUser = useAuthUser();
+  const canViewContratos = canAccessContratos(authUser?.role);
   const [filterText, setFilterText] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
@@ -56,8 +58,6 @@ export default function ClientesPage() {
   const [sobrenome, setSobrenome] = useState("");
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
-  const [senha, setSenha] = useState("");
-  const [confirmarSenha, setConfirmarSenha] = useState("");
   const [empresa, setEmpresa] = useState("");
 
   // TanStack Query fetching
@@ -74,6 +74,7 @@ export default function ClientesPage() {
   const { data: contratos = [] } = useQuery({
     queryKey: ["contratos"],
     queryFn: dbService.getContratos,
+    enabled: canViewContratos,
   });
 
   // Mutations
@@ -109,8 +110,6 @@ export default function ClientesPage() {
     setSobrenome("");
     setEmail("");
     setTelefone("");
-    setSenha("");
-    setConfirmarSenha("");
     setEmpresa("");
     setIsModalOpen(true);
   };
@@ -122,8 +121,6 @@ export default function ClientesPage() {
     setSobrenome(names.slice(1).join(" ") || "");
     setEmail(cliente.email);
     setTelefone(cliente.telefone || "");
-    setSenha("");
-    setConfirmarSenha("");
     setEmpresa(cliente.empresa || "");
     setIsModalOpen(true);
   };
@@ -134,11 +131,6 @@ export default function ClientesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (senha && senha !== confirmarSenha) {
-      alert("As senhas não coincidem!");
-      return;
-    }
 
     const payload = {
       nome: `${nome} ${sobrenome}`.trim(),
@@ -258,9 +250,6 @@ export default function ClientesPage() {
                     Contato
                   </TableHead>
                   <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
-                    Usuários
-                  </TableHead>
-                  <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
                     Plano
                   </TableHead>
                   <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
@@ -303,17 +292,6 @@ export default function ClientesPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-zinc-300 text-sm">{cliente.email}</TableCell>
-                      <TableCell>
-                        <div className="flex -space-x-1.5 overflow-hidden">
-                          <Avatar className="inline-block size-6 ring-2 ring-[#161616]">
-                            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${cliente.nome}`} />
-                            <AvatarFallback>{cliente.nome.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          <Avatar className="inline-block size-6 ring-2 ring-[#161616]">
-                            <AvatarFallback className="bg-zinc-800 text-[10px] text-zinc-400">+3</AvatarFallback>
-                          </Avatar>
-                        </div>
-                      </TableCell>
                       <TableCell>
                         <span className="text-xs text-zinc-300 font-medium">Business</span>
                       </TableCell>
@@ -437,14 +415,14 @@ export default function ClientesPage() {
 
       {/* Add/Edit Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="bg-[#161616] border border-zinc-800 text-white max-w-lg">
+        <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-lg)">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-white">
                 {selectedCliente ? "Editar Cliente" : "Adicionar Novo Cliente"}
               </DialogTitle>
               <DialogDescription className="text-zinc-400 text-sm">
-                Preencha os dados para cadastrar um novo cliente e o usuário dono.
+                Preencha os dados para cadastrar um novo cliente.
               </DialogDescription>
             </DialogHeader>
 
@@ -498,35 +476,6 @@ export default function ClientesPage() {
                   className="bg-zinc-900 border-zinc-800 text-white text-sm"
                 />
               </div>
-
-              {!selectedCliente && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="senha" className="text-zinc-300 text-xs">Senha</Label>
-                    <Input
-                      id="senha"
-                      type="password"
-                      value={senha}
-                      onChange={(e) => setSenha(e.target.value)}
-                      required
-                      placeholder="Mín. 8 caracteres"
-                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="confirmarSenha" className="text-zinc-300 text-xs">Confirmar Senha</Label>
-                    <Input
-                      id="confirmarSenha"
-                      type="password"
-                      value={confirmarSenha}
-                      onChange={(e) => setConfirmarSenha(e.target.value)}
-                      required
-                      placeholder="Confirme sua senha"
-                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                    />
-                  </div>
-                </div>
-              )}
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="empresa" className="text-zinc-300 text-xs">Nome da Empresa</Label>
