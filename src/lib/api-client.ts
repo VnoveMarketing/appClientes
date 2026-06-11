@@ -1,4 +1,13 @@
-import type { Cliente, Proposta, Contrato, EscopoItemCatalog } from "./types";
+import type {
+  Cliente,
+  Proposta,
+  Contrato,
+  EscopoItemCatalog,
+  TipoServico,
+  TipoServicoEntregavel,
+  ContratoModelo,
+} from "./types";
+import type { ContratoAssinaturaEvidencias } from "./signature-audit";
 
 type PublicPropostaResponse = { proposta: Proposta; cliente: Cliente | null };
 type PublicContratoResponse = { contrato: Contrato; cliente: Cliente | null };
@@ -72,6 +81,9 @@ export const apiClient = {
   deleteProposta: (id: string): Promise<void> =>
     apiFetch(`/api/propostas/${id}`, { method: "DELETE" }),
 
+  enviarPropostaEmail: (id: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/propostas/${id}/enviar-email`, { method: "POST" }),
+
   // CONTRATOS
   getContratos: (): Promise<Contrato[]> => apiFetch("/api/contratos"),
 
@@ -96,6 +108,9 @@ export const apiClient = {
       method: "PATCH",
       body: JSON.stringify(updates),
     }),
+
+  getContratoEvidencias: (id: string): Promise<ContratoAssinaturaEvidencias> =>
+    apiFetch(`/api/contratos/${id}/evidencias`),
 
   // PUBLIC
   getPublicPropostaById: async (id: string): Promise<PublicPropostaResponse | null> => {
@@ -158,8 +173,29 @@ export const apiClient = {
     return data?.cliente ?? null;
   },
 
-  signPublicContrato: (id: string): Promise<Contrato> =>
-    apiFetch(`/api/public/contratos/${id}/assinar`, { method: "PATCH" }),
+  signPublicContrato: (
+    id: string,
+    evidencias: {
+      signatario_nome: string;
+      signatario_cpf: string;
+      signatario_email: string;
+      signatario_telefone?: string;
+      signatario_cnpj?: string;
+      user_agent?: string;
+      geo_latitude?: number | null;
+      geo_longitude?: number | null;
+      geo_precisao?: number | null;
+      geo_fonte?: string | null;
+      assinatura_tipo: "draw" | "type";
+      assinatura_conteudo: string;
+      otp_token_id?: string | null;
+      otp_validado?: boolean;
+    }
+  ): Promise<Contrato> =>
+    apiFetch(`/api/public/contratos/${id}/assinar`, {
+      method: "PATCH",
+      body: JSON.stringify(evidencias),
+    }),
 
   // ESCOPO
   getEscopoItens: (): Promise<EscopoItemCatalog[]> =>
@@ -186,4 +222,95 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify({ file }),
     }),
+
+  // TIPOS DE SERVIÇO
+  getTiposServico: (): Promise<TipoServico[]> => apiFetch("/api/tipos-servico"),
+
+  addTipoServico: (payload: {
+    nome: string;
+    descricao?: string;
+    campos?: Array<{
+      chave: string;
+      label: string;
+      tipo_campo?: string;
+      ordem?: number;
+      obrigatorio?: boolean;
+      placeholder?: string;
+    }>;
+    entregaveis?: Array<{ nome: string; descricao?: string; ordem?: number }>;
+  }): Promise<TipoServico> =>
+    apiFetch("/api/tipos-servico", { method: "POST", body: JSON.stringify(payload) }),
+
+  updateTipoServico: (
+    id: string,
+    payload: {
+      nome?: string;
+      descricao?: string;
+      campos?: Array<{
+        chave: string;
+        label: string;
+        tipo_campo?: string;
+        ordem?: number;
+        obrigatorio?: boolean;
+        placeholder?: string;
+      }>;
+      entregaveis?: Array<{ nome: string; descricao?: string; ordem?: number }>;
+    }
+  ): Promise<TipoServico> =>
+    apiFetch(`/api/tipos-servico/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  deleteTipoServico: (id: string): Promise<void> =>
+    apiFetch(`/api/tipos-servico/${id}`, { method: "DELETE" }),
+
+  addEntregavelTipo: (
+    tipoId: string,
+    item: { nome: string; descricao?: string; ordem?: number }
+  ): Promise<TipoServicoEntregavel> =>
+    apiFetch(`/api/tipos-servico/${tipoId}/entregaveis`, {
+      method: "POST",
+      body: JSON.stringify(item),
+    }),
+
+  deleteEntregavelTipo: (tipoId: string, entregavelId: string) =>
+    apiFetch(`/api/tipos-servico/${tipoId}/entregaveis?entregavelId=${entregavelId}`, {
+      method: "DELETE",
+    }),
+
+  // CONTRATO MODELOS
+  getContratoModelos: (): Promise<ContratoModelo[]> => apiFetch("/api/contrato-modelos"),
+
+  addContratoModelo: (payload: {
+    nome: string;
+    conteudo_template?: string;
+    arquivo_url?: string | null;
+    arquivo_nome?: string | null;
+    mime_type?: string | null;
+    ativo?: boolean;
+  }): Promise<ContratoModelo> =>
+    apiFetch("/api/contrato-modelos", { method: "POST", body: JSON.stringify(payload) }),
+
+  updateContratoModelo: (id: string, updates: Partial<ContratoModelo>): Promise<ContratoModelo> =>
+    apiFetch(`/api/contrato-modelos/${id}`, { method: "PATCH", body: JSON.stringify(updates) }),
+
+  deleteContratoModelo: (id: string): Promise<void> =>
+    apiFetch(`/api/contrato-modelos/${id}`, { method: "DELETE" }),
+
+  uploadContratoModelo: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/contrato-modelos/upload", {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || `Erro ${res.status}`);
+    }
+    return res.json() as Promise<{
+      conteudo_template: string;
+      arquivo_nome: string;
+      mime_type: string | null;
+    }>;
+  },
 };

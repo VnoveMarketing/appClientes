@@ -7,6 +7,26 @@ type EmailTemplateParams = {
   footerNote?: string;
 };
 
+export function buildEmailText({
+  title,
+  greeting = "Olá,",
+  body,
+  ctaLabel,
+  ctaUrl,
+  footerNote,
+}: EmailTemplateParams) {
+  const plainBody = body.replace(/<[^>]+>/g, "");
+  const lines = [title, "", greeting, "", plainBody];
+  if (ctaLabel && ctaUrl) {
+    lines.push("", `${ctaLabel}: ${ctaUrl}`);
+  }
+  if (footerNote) {
+    lines.push("", footerNote);
+  }
+  lines.push("", "—", "Agência V9nove · Mensagem automática do sistema");
+  return lines.join("\n");
+}
+
 export function buildEmailHtml({
   title,
   greeting = "Olá,",

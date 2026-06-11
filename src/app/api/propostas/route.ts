@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requirePropostasAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
 import { notifyPropostaPronta } from "@/lib/email/notifications";
+import { syncLegacyFinancialFields } from "@/lib/proposta-campos";
 
 export async function GET() {
   const auth = await requirePropostasAccess();
@@ -22,6 +23,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const {
     cliente_id,
+    tipo_servico_id,
+    campos_valores,
     setup,
     mensalidade,
     desconto_setup,
@@ -33,28 +36,28 @@ export async function POST(request: NextRequest) {
     status,
   } = body;
 
-  if (
-    !cliente_id ||
-    setup == null ||
-    mensalidade == null ||
-    duracao == null ||
-    Number.isNaN(Number(setup)) ||
-    Number.isNaN(Number(mensalidade)) ||
-    Number.isNaN(Number(duracao))
-  ) {
-    return errorResponse("Campos obrigatórios incompletos");
+  if (!cliente_id || !tipo_servico_id) {
+    return errorResponse("Cliente e tipo de serviço são obrigatórios");
   }
+
+  const financial = syncLegacyFinancialFields(campos_valores ?? {}, {
+    setup: setup != null ? Number(setup) : undefined,
+    mensalidade: mensalidade != null ? Number(mensalidade) : undefined,
+    duracao: duracao != null ? Number(duracao) : undefined,
+  });
 
   const { data, error } = await auth.supabase
     .from("propostas")
     .insert([
       {
         cliente_id,
-        setup,
-        mensalidade,
+        tipo_servico_id,
+        campos_valores: campos_valores ?? {},
+        setup: financial.setup,
+        mensalidade: financial.mensalidade,
         desconto_setup: desconto_setup ?? 0,
         desconto_mensalidade: desconto_mensalidade ?? 0,
-        duracao,
+        duracao: financial.duracao,
         condicao_descricao: condicao_descricao?.trim() || "Nenhuma",
         escopo: escopo ?? [],
         escopo_descricao_adicional: escopo_descricao_adicional?.trim() ?? "",
@@ -66,7 +69,14 @@ export async function POST(request: NextRequest) {
 
   if (error) return errorResponse(error.message, 500);
 
-  notifyPropostaPronta(data.id, data.cliente_id).catch(console.error);
+  try {
+    const result = await notifyPropostaPronta(data.id, data.cliente_id);
+    if (result && !result.ok) {
+      console.error("[email] notifyPropostaPronta:", result.error);
+    }
+  } catch (e) {
+    console.error("[email] notifyPropostaPronta falhou:", e);
+  }
 
   return jsonResponse(data, 201);
 }

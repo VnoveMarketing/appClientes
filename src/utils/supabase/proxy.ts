@@ -35,7 +35,8 @@ export async function updateSession(request: NextRequest) {
   const isProtected =
     pathname.startsWith("/clientes") ||
     pathname.startsWith("/propostas") ||
-    pathname.startsWith("/contratos");
+    pathname.startsWith("/contratos") ||
+    pathname.startsWith("/configuracoes");
   const isAuthPage = pathname === "/login";
 
   if (isProtected && !user) {
@@ -43,6 +44,21 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isProtected && user && pathname.startsWith("/contratos")) {
+    const userId = user.sub as string | undefined;
+    if (userId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profile?.role === "consultor") {
+        return NextResponse.redirect(new URL("/clientes", request.url));
+      }
+    }
+  }
+
+  if (isProtected && user && pathname.startsWith("/configuracoes")) {
     const userId = user.sub as string | undefined;
     if (userId) {
       const { data: profile } = await supabase

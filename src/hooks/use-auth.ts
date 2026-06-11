@@ -51,3 +51,7 @@ export function useLogout() {
 export function canAccessContratos(role?: UserRole) {
   return role === "admin" || role === "financeiro";
 }
+
+export function canAccessConfig(role?: UserRole) {
+  return role === "admin" || role === "financeiro";
+}

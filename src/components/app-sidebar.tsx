@@ -1,12 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Users, FileText, FileCheck } from "lucide-react"
+import { Users, FileText, FileCheck, Layers, FileType } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { TeamSwitcher } from "@/components/team-switcher"
-import { useAuthUser, canAccessContratos } from "@/hooks/use-auth"
+import { useAuthUser, canAccessContratos, canAccessConfig } from "@/hooks/use-auth"
 import {
   Sidebar,
   SidebarContent,
@@ -39,15 +39,33 @@ const allNavItems = [
     icon: FileCheck,
     requiresContratos: true,
   },
+  {
+    title: "Tipos de Serviço",
+    url: "/configuracoes/tipos-servico",
+    icon: Layers,
+    requiresConfig: true,
+  },
+  {
+    title: "Modelo de Contrato",
+    url: "/configuracoes/contrato-modelos",
+    icon: FileType,
+    requiresConfig: true,
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const authUser = useAuthUser();
   const user = authUser ?? defaultUser;
 
-  const navMain = allNavItems.filter(
-    (item) => !item.requiresContratos || canAccessContratos(authUser?.role)
-  );
+  const navMain = allNavItems.filter((item) => {
+    if ("requiresContratos" in item && item.requiresContratos) {
+      return canAccessContratos(authUser?.role);
+    }
+    if ("requiresConfig" in item && item.requiresConfig) {
+      return canAccessConfig(authUser?.role);
+    }
+    return true;
+  });
 
   const teams = [
     {

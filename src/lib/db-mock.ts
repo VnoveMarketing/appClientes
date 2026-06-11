@@ -29,6 +29,8 @@ export interface Proposta {
   condicao_descricao: string;
   escopo: EscopoItemRef[] | string[];
   escopo_descricao_adicional?: string;
+  tipo_servico_id?: string | null;
+  campos_valores?: Record<string, string | number | null>;
   status: 'pendente' | 'aceita' | 'em_analise' | 'contrato_gerado';
   created_at: string;
 }
@@ -42,6 +44,7 @@ export interface Contrato {
   valor_final_mensal: number;
   detalhes_financeiros: string;
   conteudo_contrato: string;
+  documento_hash_sha256?: string | null;
   assinado_em?: string;
   created_at: string;
 }

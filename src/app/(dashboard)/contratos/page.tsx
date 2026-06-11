@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
-import { Contrato, Proposta } from "@/lib/types";
+import { Contrato, Proposta, ContratoAssinaturaEvidencias } from "@/lib/types";
 import {
   buildContractContent,
   buildDetalhesFinanceiros,
@@ -43,10 +43,121 @@ import {
   FileSignature,
   DollarSign,
   Gavel,
+  ShieldCheck,
 } from "lucide-react";
+import { useHasMounted, ClientDate } from "@/components/client-date";
+
+function EvidenciaRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 py-2 border-b border-zinc-800/60 last:border-0">
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
+      <span className="text-sm text-zinc-200 break-all">{value ?? "—"}</span>
+    </div>
+  );
+}
+
+function EvidenciasPanel({ evidencias }: { evidencias: ContratoAssinaturaEvidencias }) {
+  const geoLabel =
+    evidencias.geo_latitude != null && evidencias.geo_longitude != null
+      ? `${evidencias.geo_latitude.toFixed(6)}, ${evidencias.geo_longitude.toFixed(6)}${
+          evidencias.geo_precisao != null ? ` (±${Math.round(evidencias.geo_precisao)}m)` : ""
+        }`
+      : null;
+
+  return (
+    <div className="grid gap-4">
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
+          1. Identificação do signatário
+        </h4>
+        <EvidenciaRow label="Nome completo" value={evidencias.signatario_nome} />
+        <EvidenciaRow label="CPF" value={evidencias.signatario_cpf} />
+        <EvidenciaRow label="E-mail" value={evidencias.signatario_email} />
+        <EvidenciaRow label="Telefone" value={evidencias.signatario_telefone} />
+        <EvidenciaRow label="CNPJ" value={evidencias.signatario_cnpj} />
+      </div>
+
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
+          2. Autenticação e rastreabilidade
+        </h4>
+        <EvidenciaRow label="Endereço IP" value={evidencias.ip_address} />
+        <EvidenciaRow label="Porta lógica" value={evidencias.ip_porta} />
+        <EvidenciaRow label="User-Agent" value={evidencias.user_agent} />
+        <EvidenciaRow
+          label="Geolocalização"
+          value={
+            geoLabel ? (
+              <>
+                {geoLabel}
+                {evidencias.geo_fonte ? (
+                  <span className="text-zinc-500 text-xs ml-1">({evidencias.geo_fonte})</span>
+                ) : null}
+              </>
+            ) : (
+              "Não registrada"
+            )
+          }
+        />
+      </div>
+
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
+          3. Integridade e temporalidade
+        </h4>
+        <EvidenciaRow
+          label="Hash SHA-256 do documento"
+          value={
+            <code className="text-[11px] font-mono text-emerald-400/90">
+              {evidencias.documento_hash_sha256}
+            </code>
+          }
+        />
+        <EvidenciaRow label="Assinado em (Brasília)" value={evidencias.assinado_em_brasilia} />
+        <EvidenciaRow
+          label="Assinado em (UTC)"
+          value={<ClientDate iso={evidencias.assinado_em_utc} />}
+        />
+        <EvidenciaRow
+          label="OTP validado"
+          value={
+            evidencias.otp_token_id
+              ? evidencias.otp_validado
+                ? `Sim — token ${evidencias.otp_token_id}`
+                : `Não — token ${evidencias.otp_token_id}`
+              : "Não aplicável"
+          }
+        />
+      </div>
+
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
+          Assinatura registrada
+        </h4>
+        <EvidenciaRow
+          label="Tipo"
+          value={evidencias.assinatura_tipo === "draw" ? "Desenho digital" : "Texto digitado"}
+        />
+        {evidencias.assinatura_tipo === "draw" &&
+        evidencias.assinatura_conteudo?.startsWith("data:image") ? (
+          <div className="mt-2 p-2 bg-white rounded border border-zinc-700 inline-block">
+            <img
+              src={evidencias.assinatura_conteudo}
+              alt="Assinatura digital"
+              className="max-h-20 object-contain"
+            />
+          </div>
+        ) : evidencias.assinatura_conteudo ? (
+          <EvidenciaRow label="Texto assinado" value={evidencias.assinatura_conteudo} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export default function ContratosPage() {
   const queryClient = useQueryClient();
+  const hasMounted = useHasMounted();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPropostaId, setSelectedPropostaId] = useState("");
 
@@ -55,21 +166,32 @@ export default function ContratosPage() {
   const [finalMensal, setFinalMensal] = useState("");
   const [detalhesFinanceiros, setDetalhesFinanceiros] = useState("");
   const [conteudoContrato, setConteudoContrato] = useState("");
+  const [evidenciasContratoId, setEvidenciasContratoId] = useState<string | null>(null);
+
+  const { data: evidencias, isLoading: loadingEvidencias, error: evidenciasError } = useQuery({
+    queryKey: ["contrato-evidencias", evidenciasContratoId],
+    queryFn: () => dbService.getContratoEvidencias(evidenciasContratoId!),
+    enabled: !!evidenciasContratoId,
+    retry: false,
+  });
 
   // TanStack Query fetching
   const { data: contratos = [], isLoading } = useQuery({
     queryKey: ["contratos"],
     queryFn: dbService.getContratos,
+    enabled: hasMounted,
   });
 
   const { data: propostas = [] } = useQuery({
     queryKey: ["propostas"],
     queryFn: dbService.getPropostas,
+    enabled: hasMounted,
   });
 
   const { data: clientes = [] } = useQuery({
     queryKey: ["clientes"],
     queryFn: dbService.getClientes,
+    enabled: hasMounted,
   });
 
   // Filter proposals that are accepted ('aceita') but do not have a contract yet
@@ -197,7 +319,7 @@ export default function ContratosPage() {
 
       {/* Main Table */}
       <div className="bg-[#161616] border border-zinc-800/80 rounded-xl p-4 shadow-xl">
-        {isLoading ? (
+        {(!hasMounted || isLoading) ? (
           <div className="flex items-center justify-center py-12 text-zinc-500 text-sm">
             Carregando contratos...
           </div>
@@ -278,20 +400,28 @@ export default function ContratosPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-zinc-400 text-xs">
-                        {contrato.assinado_em
-                          ? new Date(contrato.assinado_em).toLocaleDateString("pt-BR") +
-                            " às " +
-                            new Date(contrato.assinado_em).toLocaleTimeString("pt-BR", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "--"}
+                        {contrato.assinado_em ? (
+                          <ClientDate iso={contrato.assinado_em} />
+                        ) : (
+                          "--"
+                        )}
                       </TableCell>
                       <TableCell className="text-zinc-400 text-xs">
-                        {new Date(contrato.created_at).toLocaleDateString("pt-BR")}
+                        <ClientDate iso={contrato.created_at} />
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-2 flex-wrap">
+                          {contrato.status === "assinado" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEvidenciasContratoId(contrato.id)}
+                              className="h-7 text-xs border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10"
+                            >
+                              <ShieldCheck className="size-3 mr-1" />
+                              Trilha de Auditoria
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -436,6 +566,50 @@ export default function ContratosPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trilha de Auditoria */}
+      <Dialog
+        open={!!evidenciasContratoId}
+        onOpenChange={(open) => {
+          if (!open) setEvidenciasContratoId(null);
+        }}
+      >
+        <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-lg) max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+              <ShieldCheck className="size-5 text-emerald-400" />
+              Trilha de Auditoria
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400 text-sm">
+              Log de evidências da assinatura digital — validade jurídica e rastreabilidade.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingEvidencias && (
+            <p className="text-sm text-zinc-500 py-8 text-center">Carregando evidências...</p>
+          )}
+
+          {evidenciasError && (
+            <p className="text-sm text-rose-400 py-8 text-center">
+              {evidenciasError instanceof Error
+                ? evidenciasError.message
+                : "Trilha de auditoria não encontrada para este contrato."}
+            </p>
+          )}
+
+          {evidencias && <EvidenciasPanel evidencias={evidencias} />}
+
+          <DialogFooter className="mt-4">
+            <Button
+              variant="ghost"
+              onClick={() => setEvidenciasContratoId(null)}
+              className="text-zinc-400 hover:text-white"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

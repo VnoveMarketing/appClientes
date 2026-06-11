@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import { Proposta } from "@/lib/types";
+import { normalizeEscopo, type EscopoItemRef } from "@/lib/escopo";
+import { entregaveisToEscopo } from "@/lib/tipos-servico";
+import { syncLegacyFinancialFields } from "@/lib/proposta-campos";
 import {
-  normalizeEscopo,
-  type EscopoItemRef,
-  type EscopoItemCatalog,
-} from "@/lib/escopo";
+  computeCampoCalculado,
+  enrichCamposValoresComCalculados,
+  formatCalculatedCurrency,
+} from "@/lib/campo-calculado";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,47 +53,27 @@ import {
   Trash2,
   Eye,
   Menu,
+  Mail,
 } from "lucide-react";
-import Link from "next/link";
-
-const DEFAULT_ESCOPO_NAMES = [
-  "CRM",
-  "Funis de vendas",
-  "Chat ao vivo",
-  "API oficial do Whatsapp",
-  "Automação de fluxos",
-  "Integrações",
-];
-
-function buildDefaultEscopo(catalog: EscopoItemCatalog[]): EscopoItemRef[] {
-  return DEFAULT_ESCOPO_NAMES.map((nome) => {
-    const found = catalog.find((c) => c.nome === nome);
-    return found
-      ? { nome: found.nome, descricao: found.descricao, escopo_item_id: found.id }
-      : { nome, descricao: "" };
-  });
-}
 
 export default function PropostasPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProposta, setSelectedProposta] = useState<Proposta | null>(null);
 
-  // Form states
   const [clienteId, setClienteId] = useState("");
-  const [setup, setSetup] = useState("");
-  const [mensalidade, setMensalidade] = useState("");
+  const [tipoServicoId, setTipoServicoId] = useState("");
+  const [camposValores, setCamposValores] = useState<Record<string, string>>({});
   const [descontoSetup, setDescontoSetup] = useState("0");
   const [descontoMensalidade, setDescontoMensalidade] = useState("0");
-  const [duracao, setDuracao] = useState("12");
   const [condicaoDescricao, setCondicaoDescricao] = useState("");
   const [escopo, setEscopo] = useState<EscopoItemRef[]>([]);
   const [escopoDescricaoAdicional, setEscopoDescricaoAdicional] = useState("");
   const [novoItemNome, setNovoItemNome] = useState("");
   const [novaItemDescricao, setNovaItemDescricao] = useState("");
   const [isAddingEscopo, setIsAddingEscopo] = useState(false);
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
 
-  // TanStack Query fetching
   const { data: propostas = [], isLoading } = useQuery({
     queryKey: ["propostas"],
     queryFn: dbService.getPropostas,
@@ -101,17 +84,23 @@ export default function PropostasPage() {
     queryFn: dbService.getClientes,
   });
 
-  const { data: escopoCatalog = [] } = useQuery({
-    queryKey: ["escopo-itens"],
-    queryFn: dbService.getEscopoItens,
+  const { data: tiposServico = [] } = useQuery({
+    queryKey: ["tipos-servico"],
+    queryFn: dbService.getTiposServico,
   });
+
+  const selectedTipo = useMemo(
+    () => tiposServico.find((t) => t.id === tipoServicoId),
+    [tiposServico, tipoServicoId]
+  );
 
   const selectedCliente = clientes.find((c) => c.id === clienteId);
   const clienteLabel = selectedCliente
     ? `${selectedCliente.empresa} (${selectedCliente.nome})`
     : null;
 
-  // Mutations
+  const tipoLabel = selectedTipo?.nome ?? null;
+
   const addMutation = useMutation({
     mutationFn: dbService.addProposta,
     onSuccess: () => {
@@ -139,30 +128,53 @@ export default function PropostasPage() {
     },
   });
 
-  const openAddModal = () => {
-    setSelectedProposta(null);
+  const applyTipoServico = (tipoId: string) => {
+    const tipo = tiposServico.find((t) => t.id === tipoId);
+    if (!tipo) return;
+
+    const initialCampos: Record<string, string> = {};
+    for (const campo of tipo.campos ?? []) {
+      initialCampos[campo.chave] = camposValores[campo.chave] ?? "";
+    }
+    setCamposValores(initialCampos);
+    setEscopo(entregaveisToEscopo(tipo.entregaveis ?? []));
+  };
+
+  const handleTipoChange = (tipoId: string) => {
+    setTipoServicoId(tipoId);
+    applyTipoServico(tipoId);
+  };
+
+  const resetForm = () => {
     setClienteId("");
-    setSetup("9500");
-    setMensalidade("2987");
+    setTipoServicoId("");
+    setCamposValores({});
     setDescontoSetup("0");
     setDescontoMensalidade("0");
-    setDuracao("12");
     setCondicaoDescricao("");
-    setEscopo(buildDefaultEscopo(escopoCatalog));
+    setEscopo([]);
     setEscopoDescricaoAdicional("");
     setNovoItemNome("");
     setNovaItemDescricao("");
+  };
+
+  const openAddModal = () => {
+    setSelectedProposta(null);
+    resetForm();
     setIsModalOpen(true);
   };
 
   const openEditModal = (proposta: Proposta) => {
     setSelectedProposta(proposta);
     setClienteId(proposta.cliente_id);
-    setSetup(proposta.setup.toString());
-    setMensalidade(proposta.mensalidade.toString());
+    setTipoServicoId(proposta.tipo_servico_id ?? "");
+    setCamposValores(
+      Object.fromEntries(
+        Object.entries(proposta.campos_valores ?? {}).map(([k, v]) => [k, String(v ?? "")])
+      )
+    );
     setDescontoSetup(proposta.desconto_setup.toString());
     setDescontoMensalidade(proposta.desconto_mensalidade.toString());
-    setDuracao(proposta.duracao.toString());
     setCondicaoDescricao(proposta.condicao_descricao || "");
     setEscopo(normalizeEscopo(proposta.escopo));
     setEscopoDescricaoAdicional(proposta.escopo_descricao_adicional ?? "");
@@ -171,18 +183,17 @@ export default function PropostasPage() {
     setIsModalOpen(true);
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-  };
+  const closeModal = () => setIsModalOpen(false);
 
   const handleAddEscopoItem = async () => {
-    if (!novoItemNome.trim()) return;
+    if (!novoItemNome.trim() || !tipoServicoId) return;
 
     setIsAddingEscopo(true);
     try {
-      const saved = await dbService.addEscopoItem({
+      const saved = await dbService.addEntregavelTipo(tipoServicoId, {
         nome: novoItemNome.trim(),
         descricao: novaItemDescricao.trim(),
+        ordem: escopo.length,
       });
 
       setEscopo([
@@ -190,12 +201,12 @@ export default function PropostasPage() {
         {
           nome: saved.nome,
           descricao: saved.descricao,
-          escopo_item_id: saved.id,
-        },
+          entregavel_id: saved.id,
+        } as EscopoItemRef & { entregavel_id?: string },
       ]);
       setNovoItemNome("");
       setNovaItemDescricao("");
-      queryClient.invalidateQueries({ queryKey: ["escopo-itens"] });
+      queryClient.invalidateQueries({ queryKey: ["tipos-servico"] });
     } finally {
       setIsAddingEscopo(false);
     }
@@ -208,23 +219,39 @@ export default function PropostasPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!tipoServicoId) {
+      alert("Selecione um tipo de serviço.");
+      return;
+    }
+
+    const camposNumericos = enrichCamposValoresComCalculados(
+      selectedTipo?.campos ?? [],
+      Object.fromEntries(
+        Object.entries(camposValores).map(([k, v]) => [k, v === "" ? null : Number(v) || v])
+      )
+    );
+
+    const financial = syncLegacyFinancialFields(camposNumericos);
+
     const payload = {
       cliente_id: clienteId,
-      setup: parseFloat(setup),
-      mensalidade: parseFloat(mensalidade),
+      tipo_servico_id: tipoServicoId,
+      campos_valores: camposNumericos,
+      setup: financial.setup,
+      mensalidade: financial.mensalidade,
       desconto_setup: parseFloat(descontoSetup),
       desconto_mensalidade: parseFloat(descontoMensalidade),
-      duracao: parseInt(duracao),
+      duracao: financial.duracao,
       condicao_descricao: condicaoDescricao,
       escopo,
       escopo_descricao_adicional: escopoDescricaoAdicional,
-      status: (selectedProposta ? selectedProposta.status : "pendente") as any,
+      status: (selectedProposta ? selectedProposta.status : "pendente") as Proposta["status"],
     };
 
     if (selectedProposta) {
       updateMutation.mutate({ id: selectedProposta.id, updates: payload });
     } else {
-      addMutation.mutate(payload);
+      addMutation.mutate(payload as Omit<Proposta, "id" | "created_at">);
     }
   };
 
@@ -240,19 +267,36 @@ export default function PropostasPage() {
     alert("Link da proposta copiado para a área de transferência:\n" + link);
   };
 
-  // Helper: format currency
-  const formatBRL = (val: number) => {
-    return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const handleSendEmail = async (proposta: Proposta) => {
+    const client = clientes.find((c) => c.id === proposta.cliente_id);
+    if (!client?.email) {
+      alert("Este cliente não possui e-mail cadastrado. Atualize o cadastro do cliente antes de enviar.");
+      return;
+    }
+
+    if (!confirm(`Enviar proposta por e-mail para ${client.email}?`)) return;
+
+    setSendingEmailId(proposta.id);
+    try {
+      await dbService.enviarPropostaEmail(proposta.id);
+      alert(`E-mail enviado para ${client.email}`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Falha ao enviar e-mail");
+    } finally {
+      setSendingEmailId(null);
+    }
   };
 
-  // Helper: calculate discounted value
-  const calcDiscount = (val: number, pct: number) => {
-    return val - (val * pct) / 100;
-  };
+  const formatBRL = (val: number) =>
+    val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const calcDiscount = (val: number, pct: number) => val - (val * pct) / 100;
+
+  const getTipoNome = (id?: string | null) =>
+    tiposServico.find((t) => t.id === id)?.nome ?? "—";
 
   return (
     <div className="flex flex-col gap-6 w-full text-zinc-100">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white">Propostas</h1>
@@ -269,7 +313,6 @@ export default function PropostasPage() {
         </Button>
       </div>
 
-      {/* Table Section */}
       <div className="bg-[#161616] border border-zinc-800/80 rounded-xl p-4 shadow-xl">
         {isLoading ? (
           <div className="flex items-center justify-center py-12 text-zinc-500 text-sm">
@@ -288,16 +331,13 @@ export default function PropostasPage() {
                     Cliente
                   </TableHead>
                   <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
+                    Tipo
+                  </TableHead>
+                  <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
                     Mensalidade
                   </TableHead>
                   <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
                     Setup
-                  </TableHead>
-                  <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
-                    Duração (Meses)
-                  </TableHead>
-                  <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
-                    Condições Especiais
                   </TableHead>
                   <TableHead className="text-zinc-400 font-semibold text-xs uppercase tracking-wider">
                     Status
@@ -321,41 +361,26 @@ export default function PropostasPage() {
                       <TableCell className="font-semibold text-white">
                         {client ? client.empresa : "Empresa Desconhecida"}
                       </TableCell>
+                      <TableCell className="text-zinc-400 text-xs">
+                        {getTipoNome(proposta.tipo_servico_id)}
+                      </TableCell>
                       <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-emerald-400 font-bold">
-                            {formatBRL(calcDiscount(proposta.mensalidade, proposta.desconto_mensalidade))}
+                        <span className="text-emerald-400 font-bold">
+                          {formatBRL(
+                            calcDiscount(proposta.mensalidade, proposta.desconto_mensalidade)
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {isSetupIsento ? (
+                          <span className="text-zinc-400 font-medium text-xs bg-zinc-800 border border-zinc-700/80 px-2 py-0.5 rounded w-fit">
+                            ISENTO
                           </span>
-                          {proposta.desconto_mensalidade > 0 && (
-                            <span className="text-zinc-500 line-through text-xs">
-                              {formatBRL(proposta.mensalidade)}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col text-zinc-300">
-                          {isSetupIsento ? (
-                            <span className="text-zinc-400 font-medium text-xs bg-zinc-800 border border-zinc-700/80 px-2 py-0.5 rounded w-fit">
-                              ISENTO
-                            </span>
-                          ) : (
-                            <span className="font-semibold">
-                              {formatBRL(calcDiscount(proposta.setup, proposta.desconto_setup))}
-                            </span>
-                          )}
-                          {proposta.desconto_setup > 0 && !isSetupIsento && (
-                            <span className="text-zinc-500 line-through text-xs">
-                              {formatBRL(proposta.setup)}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-zinc-300 text-sm font-medium">
-                        {proposta.duracao === 0 ? "Sem prazo" : `${proposta.duracao} meses`}
-                      </TableCell>
-                      <TableCell className="text-zinc-400 text-xs max-w-xs truncate">
-                        {proposta.condicao_descricao || "Nenhuma"}
+                        ) : (
+                          <span className="font-semibold text-zinc-300">
+                            {formatBRL(calcDiscount(proposta.setup, proposta.desconto_setup))}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span
@@ -386,6 +411,14 @@ export default function PropostasPage() {
                             }
                           />
                           <DropdownMenuContent align="end" className="bg-[#1c1c1e] border border-zinc-800 text-zinc-200">
+                            <DropdownMenuItem
+                              onClick={() => handleSendEmail(proposta)}
+                              disabled={sendingEmailId === proposta.id}
+                              className="focus:bg-[#09A3E9]/10 focus:text-white cursor-pointer gap-2"
+                            >
+                              <Mail className="size-3.5" />
+                              {sendingEmailId === proposta.id ? "Enviando..." : "Enviar por E-mail"}
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleCopyLink(proposta.id)}
                               className="focus:bg-[#09A3E9]/10 focus:text-white cursor-pointer gap-2"
@@ -426,7 +459,6 @@ export default function PropostasPage() {
         )}
       </div>
 
-      {/* Add/Edit Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-xl) max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSubmit}>
@@ -435,209 +467,241 @@ export default function PropostasPage() {
                 {selectedProposta ? "Editar Proposta" : "Nova Proposta"}
               </DialogTitle>
               <DialogDescription className="text-zinc-400 text-sm">
-                Preencha os dados para gerar uma proposta comercial personalizada.
+                Selecione o cliente e o tipo de serviço para carregar campos e entregáveis.
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cliente" className="text-zinc-300 text-xs">Nome do cliente *</Label>
-                <Select value={clienteId} onValueChange={(v) => v && setClienteId(v)} required>
-                  <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-white text-sm">
-                    <SelectValue placeholder="Selecione um cliente">
-                      {clienteLabel}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.empresa} ({c.nome})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="setup" className="text-zinc-300 text-xs">Setup (R$)</Label>
-                  <Input
-                    id="setup"
-                    type="number"
-                    value={setup}
-                    onChange={(e) => setSetup(e.target.value)}
-                    required
-                    placeholder="Ex: 9500"
-                    className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="mensalidade" className="text-zinc-300 text-xs">Mensalidade (R$)</Label>
-                  <Input
-                    id="mensalidade"
-                    type="number"
-                    value={mensalidade}
-                    onChange={(e) => setMensalidade(e.target.value)}
-                    required
-                    placeholder="Ex: 2987"
-                    className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-zinc-800/80 my-2 pt-3">
-                <h3 className="text-sm font-semibold text-white mb-3">Condições Especiais</h3>
-                <p className="text-xs text-zinc-400 mb-4">
-                  Defina os descontos de entrada. O cálculo será aplicado automaticamente na proposta.
-                </p>
-                
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="descontoSetup" className="text-zinc-300 text-xs">Desconto no setup (%)</Label>
-                    <Input
-                      id="descontoSetup"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={descontoSetup}
-                      onChange={(e) => setDescontoSetup(e.target.value)}
-                      placeholder="Ex: 100"
-                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                    />
-                    <span className="text-[10px] text-zinc-500">0 = sem desconto, 100 = isento</span>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="descontoMensalidade" className="text-zinc-300 text-xs">Desconto mensalidade (%)</Label>
-                    <Input
-                      id="descontoMensalidade"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={descontoMensalidade}
-                      onChange={(e) => setDescontoMensalidade(e.target.value)}
-                      placeholder="Ex: 50"
-                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                    />
-                    <span className="text-[10px] text-zinc-500">0 = sem desconto</span>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="duracao" className="text-zinc-300 text-xs">Duração (meses)</Label>
-                    <Input
-                      id="duracao"
-                      type="number"
-                      value={duracao}
-                      onChange={(e) => setDuracao(e.target.value)}
-                      placeholder="Ex: 3"
-                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                    />
-                    <span className="text-[10px] text-zinc-500">0 = sem prazo</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1.5 mt-4">
-                  <Label htmlFor="condicaoDescricao" className="text-zinc-300 text-xs">Descrição da condição (opcional)</Label>
-                  <Input
-                    id="condicaoDescricao"
-                    value={condicaoDescricao}
-                    onChange={(e) => setCondicaoDescricao(e.target.value)}
-                    placeholder="Ex: 100% isenção de Setup + 50% de desconto por 3 meses"
-                    className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                  />
-                  <span className="text-[10px] text-zinc-500">Texto livre exibido como destaque na proposta, além do cálculo automático.</span>
-                </div>
-              </div>
-
-              <div className="border-t border-zinc-800/80 my-2 pt-3">
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-white">Escopo da Solução</h3>
-                  <p className="text-xs text-zinc-400">Itens incluídos na proposta e no contrato</p>
-                </div>
-
-                <div className="grid gap-3 mb-4 p-3 border border-zinc-800 rounded-lg bg-zinc-950">
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-zinc-300 text-xs">Nome do item *</Label>
-                    <Input
-                      placeholder="Ex: CRM, Integrações..."
-                      value={novoItemNome}
-                      onChange={(e) => setNovoItemNome(e.target.value)}
-                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-zinc-300 text-xs">Descrição do entregável</Label>
-                    <textarea
-                      placeholder="Descreva o que está incluso neste item..."
-                      value={novaItemDescricao}
-                      onChange={(e) => setNovaItemDescricao(e.target.value)}
-                      rows={3}
-                      className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={handleAddEscopoItem}
-                    disabled={isAddingEscopo || !novoItemNome.trim()}
-                    size="sm"
-                    className="w-fit bg-zinc-800 hover:bg-zinc-700 text-white text-xs border border-zinc-700"
-                  >
-                    {isAddingEscopo ? "Salvando..." : "+ Adicionar item ao escopo"}
-                  </Button>
-                </div>
-
-                <div className="grid gap-2 border border-zinc-800 rounded-lg p-3 bg-zinc-950 mb-4">
-                  {escopo.map((item, idx) => (
-                    <div
-                      key={`${item.nome}-${idx}`}
-                      className="flex items-start justify-between bg-zinc-900 border border-zinc-800/80 rounded px-3 py-2"
-                    >
-                      <div className="flex items-start gap-2 flex-1 min-w-0">
-                        <Menu className="size-3 text-zinc-500 mt-1 shrink-0" />
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="text-xs font-semibold text-zinc-200">{item.nome}</span>
-                          {item.descricao ? (
-                            <span className="text-[11px] text-zinc-500 leading-relaxed">{item.descricao}</span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => handleRemoveEscopoItem(idx)}
-                        className="h-6 w-6 p-0 text-zinc-500 hover:text-rose-400 shrink-0"
-                      >
-                        <Trash className="size-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="escopoDescricaoAdicional" className="text-zinc-300 text-xs">
-                    Descrição adicional do escopo (opcional)
+                  <Label htmlFor="cliente" className="text-zinc-300 text-xs">
+                    Nome do cliente *
                   </Label>
-                  <textarea
-                    id="escopoDescricaoAdicional"
-                    value={escopoDescricaoAdicional}
-                    onChange={(e) => setEscopoDescricaoAdicional(e.target.value)}
-                    placeholder="Detalhes gerais do escopo que aparecerão na cláusula primeira do contrato..."
-                    rows={3}
-                    className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
-                  />
+                  <Select value={clienteId} onValueChange={(v) => v && setClienteId(v)} required>
+                    <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-white text-sm">
+                      <SelectValue placeholder="Selecione um cliente">{clienteLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                      {clientes.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.empresa} ({c.nome})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tipoServico" className="text-zinc-300 text-xs">
+                    Tipo de serviço *
+                  </Label>
+                  <Select
+                    value={tipoServicoId}
+                    onValueChange={(v) => v && handleTipoChange(v)}
+                    required
+                  >
+                    <SelectTrigger className="w-full bg-zinc-900 border-zinc-800 text-white text-sm">
+                      <SelectValue placeholder="Selecione o tipo">{tipoLabel}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-zinc-900 border-zinc-800 text-white">
+                      {tiposServico.map((tipo) => (
+                        <SelectItem key={tipo.id} value={tipo.id}>
+                          {tipo.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+
+              {selectedTipo && (
+                        <>
+                          <div className="border-t border-zinc-800/80 pt-3">
+                            <h3 className="text-sm font-semibold text-white mb-3">
+                              Tipo de serviço — {selectedTipo.nome}
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {(selectedTipo.campos ?? []).map((campo) => {
+                                if (campo.tipo_campo === "calculated") {
+                                  const valor = computeCampoCalculado(campo, camposValores);
+                                  return (
+                                    <div key={campo.chave} className="flex flex-col gap-1.5">
+                                      <Label className="text-zinc-300 text-xs">{campo.label}</Label>
+                                      <div className="h-9 flex items-center px-3 rounded-lg border border-[#09A3E9]/30 bg-[#09A3E9]/5 text-[#09A3E9] font-semibold text-sm">
+                                        {formatCalculatedCurrency(valor)}
+                                      </div>
+                                      <span className="text-[10px] text-zinc-500">
+                                        Calculado automaticamente
+                                        {campo.calculo?.operacao === "multiply"
+                                          ? " (multiplicação dos campos)"
+                                          : ""}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div key={campo.chave} className="flex flex-col gap-1.5">
+                                    <Label className="text-zinc-300 text-xs">
+                                      {campo.label}
+                                      {campo.obrigatorio ? " *" : ""}
+                                    </Label>
+                                    <Input
+                                      type={campo.tipo_campo === "text" ? "text" : "number"}
+                                      required={campo.obrigatorio}
+                                      value={camposValores[campo.chave] ?? ""}
+                                      onChange={(e) =>
+                                        setCamposValores({
+                                          ...camposValores,
+                                          [campo.chave]: e.target.value,
+                                        })
+                                      }
+                                      placeholder={campo.placeholder}
+                                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+        
+                          <div className="border-t border-zinc-800/80 pt-3">
+                            <h3 className="text-sm font-semibold text-white mb-3">Condições Especiais</h3>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-zinc-300 text-xs">Desconto no setup (%)</Label>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={descontoSetup}
+                                  onChange={(e) => setDescontoSetup(e.target.value)}
+                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-zinc-300 text-xs">Desconto mensalidade (%)</Label>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={descontoMensalidade}
+                                  onChange={(e) => setDescontoMensalidade(e.target.value)}
+                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-zinc-300 text-xs">Descrição da condição</Label>
+                                <Input
+                                  value={condicaoDescricao}
+                                  onChange={(e) => setCondicaoDescricao(e.target.value)}
+                                  placeholder="Ex: 50% nos 3 primeiros meses"
+                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+        
+                          <div className="border-t border-zinc-800/80 pt-3">
+                            <div className="mb-3">
+                              <h3 className="text-sm font-semibold text-white">Escopo da Solução</h3>
+                              <p className="text-xs text-zinc-400">
+                                Entregáveis do tipo &quot;{selectedTipo.nome}&quot; — novos itens são salvos no cadastro do tipo
+                              </p>
+                            </div>
+        
+                            <div className="grid gap-3 mb-4 p-3 border border-zinc-800 rounded-lg bg-zinc-950">
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-zinc-300 text-xs">Nome do item *</Label>
+                                <Input
+                                  placeholder="Ex: CRM, Integrações..."
+                                  value={novoItemNome}
+                                  onChange={(e) => setNovoItemNome(e.target.value)}
+                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <Label className="text-zinc-300 text-xs">Descrição do entregável</Label>
+                                <textarea
+                                  placeholder="Descreva o que está incluso..."
+                                  value={novaItemDescricao}
+                                  onChange={(e) => setNovaItemDescricao(e.target.value)}
+                                  rows={2}
+                                  className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                onClick={handleAddEscopoItem}
+                                disabled={isAddingEscopo || !novoItemNome.trim()}
+                                size="sm"
+                                className="w-fit bg-zinc-800 hover:bg-zinc-700 text-white text-xs border border-zinc-700"
+                              >
+                                {isAddingEscopo ? "Salvando..." : "+ Adicionar item ao escopo"}
+                              </Button>
+                            </div>
+        
+                            <div className="grid gap-2 border border-zinc-800 rounded-lg p-3 bg-zinc-950">
+                              {escopo.length === 0 ? (
+                                <p className="text-xs text-zinc-500 text-center py-4">
+                                  Nenhum entregável. Adicione itens ou cadastre no tipo de serviço.
+                                </p>
+                              ) : (
+                                escopo.map((item, idx) => (
+                                  <div
+                                    key={`${item.nome}-${idx}`}
+                                    className="flex items-start justify-between bg-zinc-900 border border-zinc-800/80 rounded px-3 py-2"
+                                  >
+                                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                                      <Menu className="size-3 text-zinc-500 mt-1 shrink-0" />
+                                      <div className="flex flex-col gap-0.5 min-w-0">
+                                        <span className="text-xs font-semibold text-zinc-200">{item.nome}</span>
+                                        {item.descricao ? (
+                                          <span className="text-[11px] text-zinc-500 leading-relaxed">
+                                            {item.descricao}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      onClick={() => handleRemoveEscopoItem(idx)}
+                                      className="h-6 w-6 p-0 text-zinc-500 hover:text-rose-400 shrink-0"
+                                    >
+                                      <Trash className="size-3" />
+                                    </Button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </>
+               )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="escopoDescricaoAdicional" className="text-zinc-300 text-xs">
+                  Descrição adicional do escopo
+                </Label>
+                <textarea
+                  id="escopoDescricaoAdicional"
+                  value={escopoDescricaoAdicional}
+                  onChange={(e) => setEscopoDescricaoAdicional(e.target.value)}
+                  placeholder="Detalhes gerais do escopo..."
+                  rows={2}
+                  className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
+                />
+              </div>
+
             </div>
 
             <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={closeModal}
-                className="text-zinc-400 hover:text-white"
-              >
+              <Button type="button" variant="ghost" onClick={closeModal} className="text-zinc-400 hover:text-white">
                 Cancelar
               </Button>
               <Button
                 type="submit"
+                disabled={!tipoServicoId}
                 className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-medium rounded-lg"
               >
                 {selectedProposta ? "Salvar Alterações" : "Salvar Proposta"}

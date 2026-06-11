@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api/auth";
 import { getAdminSupabase } from "@/lib/api/admin-db";
-import { notifyPropostaAceita, notifyContratoProntoAssinatura } from "@/lib/email/notifications";
+import { notifyPropostaAceita, notifyPropostaAceitaCliente, notifyContratoProntoAssinatura } from "@/lib/email/notifications";
 import { generateContractFromProposta } from "@/lib/auto-contract";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -60,7 +60,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (updateError) return errorResponse(updateError.message, 500);
 
-    notifyPropostaAceita(id, proposta.cliente_id).catch(console.error);
+    try {
+      await notifyPropostaAceita(id, proposta.cliente_id);
+    } catch (e) {
+      console.error("[email] notifyPropostaAceita falhou:", e);
+    }
+
+    const clienteContato = {
+      email: updatedCliente?.email ?? clientUpdates.email,
+      nome: updatedCliente?.nome ?? clientUpdates.nome,
+      empresa: updatedCliente?.empresa ?? clientUpdates.empresa,
+    };
+
+    try {
+      await notifyPropostaAceitaCliente(id, clienteContato);
+    } catch (e) {
+      console.error("[email] notifyPropostaAceitaCliente falhou:", e);
+    }
 
     const contrato = await generateContractFromProposta(
       supabase,
@@ -68,7 +84,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updatedCliente ?? clientUpdates
     );
 
-    notifyContratoProntoAssinatura(contrato.id, proposta.cliente_id).catch(console.error);
+    try {
+      await notifyContratoProntoAssinatura(contrato.id, proposta.cliente_id, clienteContato);
+    } catch (e) {
+      console.error("[email] notifyContratoProntoAssinatura falhou:", e);
+    }
 
     return jsonResponse({ proposta: updated, contrato });
   } catch (e) {

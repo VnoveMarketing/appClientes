@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  buildContractContent,
+  buildContractContentFromDb,
   buildDetalhesFinanceiros,
   getContractFinancialValues,
 } from "@/lib/contract-builder";
+import { hashDocumentContent } from "@/lib/signature-audit";
 
 type PropostaRow = {
   id: string;
@@ -16,6 +17,8 @@ type PropostaRow = {
   condicao_descricao: string | null;
   escopo: unknown;
   escopo_descricao_adicional?: string | null;
+  campos_valores?: Record<string, string | number | null> | null;
+  tipo_servico_id?: string | null;
 };
 
 type ClienteRow = {
@@ -39,9 +42,32 @@ export async function generateContractFromProposta(
 
   if (existing) return existing;
 
+  let tipoServicoNome: string | null = null;
+  let campos: { chave: string; label: string; tipo_campo: string }[] = [];
+
+  if (proposta.tipo_servico_id) {
+    const { data: tipo } = await supabase
+      .from("tipos_servico")
+      .select("nome")
+      .eq("id", proposta.tipo_servico_id)
+      .maybeSingle();
+    tipoServicoNome = tipo?.nome ?? null;
+
+    const { data: tipoCampos } = await supabase
+      .from("tipo_servico_campos")
+      .select("chave, label, tipo_campo")
+      .eq("tipo_servico_id", proposta.tipo_servico_id)
+      .order("ordem");
+    campos = tipoCampos ?? [];
+  }
+
   const { valor_final_setup, valor_final_mensal } = getContractFinancialValues(proposta);
-  const conteudo_contrato = buildContractContent(proposta, cliente);
+  const conteudo_contrato = await buildContractContentFromDb(supabase, proposta, cliente, {
+    tipoServicoNome,
+    campos,
+  });
   const detalhes_financeiros = buildDetalhesFinanceiros(proposta);
+  const documento_hash_sha256 = hashDocumentContent(conteudo_contrato);
 
   const { data: contrato, error } = await supabase
     .from("contratos")
@@ -54,6 +80,7 @@ export async function generateContractFromProposta(
         valor_final_mensal,
         detalhes_financeiros,
         conteudo_contrato,
+        documento_hash_sha256,
       },
     ])
     .select()
