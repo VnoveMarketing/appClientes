@@ -1,12 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Users, FileText, FileCheck, Layers, FileType } from "lucide-react"
+import { Users, FileText, FileCheck, Layers, FileType, UserCog, Shield, KeyRound, Tags, Briefcase } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import { TeamSwitcher } from "@/components/team-switcher"
-import { useAuthUser, canAccessContratos, canAccessConfig } from "@/hooks/use-auth"
+import { AgencyIcon } from "@/components/agency-brand"
+import { AGENCY_NAME } from "@/lib/brand"
+import { useAuthUser, canAccessContratos, canAccessConfig, canAccessUsuarios } from "@/hooks/use-auth"
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +53,36 @@ const allNavItems = [
     icon: FileType,
     requiresConfig: true,
   },
+  {
+    title: "Categorias de Cases",
+    url: "/configuracoes/case-categorias",
+    icon: Tags,
+    requiresConfig: true,
+  },
+  {
+    title: "Cases",
+    url: "/configuracoes/cases",
+    icon: Briefcase,
+    requiresConfig: true,
+  },
+  {
+    title: "Usuários",
+    url: "/configuracoes/usuarios",
+    icon: UserCog,
+    requiresUsuarios: true,
+  },
+  {
+    title: "Tipos de Usuário",
+    url: "/configuracoes/tipos-usuario",
+    icon: Shield,
+    requiresUsuarios: true,
+  },
+  {
+    title: "Permissões",
+    url: "/configuracoes/permissoes",
+    icon: KeyRound,
+    requiresUsuarios: true,
+  },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -64,17 +96,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     if ("requiresConfig" in item && item.requiresConfig) {
       return canAccessConfig(authUser?.role);
     }
+    if ("requiresUsuarios" in item && item.requiresUsuarios) {
+      return canAccessUsuarios(authUser?.role);
+    }
     return true;
   });
 
   const teams = [
     {
-      name: "Agência V9nove",
-      logo: (
-        <div className="flex items-center justify-center rounded-lg bg-[#09A3E9] text-white size-8 font-extrabold text-sm select-none">
-          9
-        </div>
-      ),
+      name: AGENCY_NAME,
+      logo: <AgencyIcon height={28} width={28} />,
       plan: authUser?.roleLabel ?? "Portal Interno",
     }
   ];

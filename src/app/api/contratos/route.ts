@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { requireContratosAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
-import { notifyContratoProntoAssinatura } from "@/lib/email/notifications";
 import { hashDocumentContent } from "@/lib/signature-audit";
 
 export async function GET() {
@@ -41,7 +40,7 @@ export async function POST(request: NextRequest) {
       {
         proposta_id,
         cliente_id,
-        status: status ?? "pendente_assinatura",
+        status: status ?? "pendente_financeiro",
         valor_final_setup,
         valor_final_mensal,
         detalhes_financeiros,
@@ -53,12 +52,6 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return errorResponse(error.message, 500);
-
-  try {
-    await notifyContratoProntoAssinatura(data.id, data.cliente_id);
-  } catch (e) {
-    console.error("[email] notifyContratoProntoAssinatura falhou:", e);
-  }
 
   return jsonResponse(data, 201);
 }

@@ -22,7 +22,21 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       clientes: Record<string, unknown> | null;
     };
 
-    return jsonResponse({ proposta, cliente: clientes });
+    let cases: unknown[] = [];
+    const categoriaCaseId = clientes?.categoria_case_id as string | null | undefined;
+
+    if (categoriaCaseId) {
+      const { data: casesData } = await supabase
+        .from("cases")
+        .select("id, nome, imagem_url, link, ordem")
+        .eq("categoria_id", categoriaCaseId)
+        .order("ordem")
+        .order("created_at", { ascending: false });
+
+      cases = casesData ?? [];
+    }
+
+    return jsonResponse({ proposta, cliente: clientes, cases });
   } catch (e) {
     return errorResponse(e instanceof Error ? e.message : "Erro interno", 500);
   }

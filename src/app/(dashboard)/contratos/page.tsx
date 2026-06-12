@@ -44,116 +44,11 @@ import {
   DollarSign,
   Gavel,
   ShieldCheck,
+  Pencil,
+  Send,
 } from "lucide-react";
 import { useHasMounted, ClientDate } from "@/components/client-date";
-
-function EvidenciaRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5 py-2 border-b border-zinc-800/60 last:border-0">
-      <span className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</span>
-      <span className="text-sm text-zinc-200 break-all">{value ?? "—"}</span>
-    </div>
-  );
-}
-
-function EvidenciasPanel({ evidencias }: { evidencias: ContratoAssinaturaEvidencias }) {
-  const geoLabel =
-    evidencias.geo_latitude != null && evidencias.geo_longitude != null
-      ? `${evidencias.geo_latitude.toFixed(6)}, ${evidencias.geo_longitude.toFixed(6)}${
-          evidencias.geo_precisao != null ? ` (±${Math.round(evidencias.geo_precisao)}m)` : ""
-        }`
-      : null;
-
-  return (
-    <div className="grid gap-4">
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
-          1. Identificação do signatário
-        </h4>
-        <EvidenciaRow label="Nome completo" value={evidencias.signatario_nome} />
-        <EvidenciaRow label="CPF" value={evidencias.signatario_cpf} />
-        <EvidenciaRow label="E-mail" value={evidencias.signatario_email} />
-        <EvidenciaRow label="Telefone" value={evidencias.signatario_telefone} />
-        <EvidenciaRow label="CNPJ" value={evidencias.signatario_cnpj} />
-      </div>
-
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
-          2. Autenticação e rastreabilidade
-        </h4>
-        <EvidenciaRow label="Endereço IP" value={evidencias.ip_address} />
-        <EvidenciaRow label="Porta lógica" value={evidencias.ip_porta} />
-        <EvidenciaRow label="User-Agent" value={evidencias.user_agent} />
-        <EvidenciaRow
-          label="Geolocalização"
-          value={
-            geoLabel ? (
-              <>
-                {geoLabel}
-                {evidencias.geo_fonte ? (
-                  <span className="text-zinc-500 text-xs ml-1">({evidencias.geo_fonte})</span>
-                ) : null}
-              </>
-            ) : (
-              "Não registrada"
-            )
-          }
-        />
-      </div>
-
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
-          3. Integridade e temporalidade
-        </h4>
-        <EvidenciaRow
-          label="Hash SHA-256 do documento"
-          value={
-            <code className="text-[11px] font-mono text-emerald-400/90">
-              {evidencias.documento_hash_sha256}
-            </code>
-          }
-        />
-        <EvidenciaRow label="Assinado em (Brasília)" value={evidencias.assinado_em_brasilia} />
-        <EvidenciaRow
-          label="Assinado em (UTC)"
-          value={<ClientDate iso={evidencias.assinado_em_utc} />}
-        />
-        <EvidenciaRow
-          label="OTP validado"
-          value={
-            evidencias.otp_token_id
-              ? evidencias.otp_validado
-                ? `Sim — token ${evidencias.otp_token_id}`
-                : `Não — token ${evidencias.otp_token_id}`
-              : "Não aplicável"
-          }
-        />
-      </div>
-
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-        <h4 className="text-xs font-semibold text-[#09A3E9] uppercase tracking-wider mb-2">
-          Assinatura registrada
-        </h4>
-        <EvidenciaRow
-          label="Tipo"
-          value={evidencias.assinatura_tipo === "draw" ? "Desenho digital" : "Texto digitado"}
-        />
-        {evidencias.assinatura_tipo === "draw" &&
-        evidencias.assinatura_conteudo?.startsWith("data:image") ? (
-          <div className="mt-2 p-2 bg-white rounded border border-zinc-700 inline-block">
-            <img
-              src={evidencias.assinatura_conteudo}
-              alt="Assinatura digital"
-              className="max-h-20 object-contain"
-            />
-          </div>
-        ) : evidencias.assinatura_conteudo ? (
-          <EvidenciaRow label="Texto assinado" value={evidencias.assinatura_conteudo} />
-        ) : null}
-      </div>
-    </div>
-  );
-}
+import { ContratoEvidenciasPanel } from "@/components/contrato-evidencias-panel";
 
 export default function ContratosPage() {
   const queryClient = useQueryClient();
@@ -167,6 +62,11 @@ export default function ContratosPage() {
   const [detalhesFinanceiros, setDetalhesFinanceiros] = useState("");
   const [conteudoContrato, setConteudoContrato] = useState("");
   const [evidenciasContratoId, setEvidenciasContratoId] = useState<string | null>(null);
+  const [revisaoContrato, setRevisaoContrato] = useState<Contrato | null>(null);
+  const [revisaoSetup, setRevisaoSetup] = useState("");
+  const [revisaoMensal, setRevisaoMensal] = useState("");
+  const [revisaoDetalhes, setRevisaoDetalhes] = useState("");
+  const [revisaoConteudo, setRevisaoConteudo] = useState("");
 
   const { data: evidencias, isLoading: loadingEvidencias, error: evidenciasError } = useQuery({
     queryKey: ["contrato-evidencias", evidenciasContratoId],
@@ -210,7 +110,7 @@ export default function ContratosPage() {
       valor_final_mensal: number;
       detalhes_financeiros: string;
       conteudo_contrato: string;
-      status: "pendente_assinatura";
+      status: "pendente_financeiro";
     }) => {
       // 1. Add contract
       const contract = await dbService.addContrato(payload);
@@ -280,8 +180,60 @@ export default function ContratosPage() {
       valor_final_mensal: parseFloat(finalMensal),
       detalhes_financeiros: detalhesFinanceiros,
       conteudo_contrato: conteudoContrato,
-      status: "pendente_assinatura",
+      status: "pendente_financeiro",
     });
+  };
+
+  const revisarMutation = useMutation({
+    mutationFn: async () => {
+      if (!revisaoContrato) return;
+      return dbService.revisarContrato(revisaoContrato.id, {
+        valor_final_setup: parseFloat(revisaoSetup),
+        valor_final_mensal: parseFloat(revisaoMensal),
+        detalhes_financeiros: revisaoDetalhes,
+        conteudo_contrato: revisaoConteudo,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contratos"] });
+    },
+  });
+
+  const liberarMutation = useMutation({
+    mutationFn: (contratoId: string) => dbService.liberarContratoAssinatura(contratoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contratos"] });
+      setRevisaoContrato(null);
+      alert("Contrato liberado! O cliente receberá o e-mail para assinatura.");
+    },
+  });
+
+  const openRevisaoModal = (contrato: Contrato) => {
+    setRevisaoContrato(contrato);
+    setRevisaoSetup(String(contrato.valor_final_setup));
+    setRevisaoMensal(String(contrato.valor_final_mensal));
+    setRevisaoDetalhes(contrato.detalhes_financeiros);
+    setRevisaoConteudo(contrato.conteudo_contrato);
+  };
+
+  const handleSalvarRevisao = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await revisarMutation.mutateAsync();
+    alert("Alterações salvas.");
+  };
+
+  const handleLiberarAssinatura = async () => {
+    if (!revisaoContrato) return;
+    if (
+      !confirm(
+        "Liberar contrato para assinatura do cliente? Um e-mail será enviado automaticamente."
+      )
+    ) {
+      return;
+    }
+    if (revisarMutation.isPending) return;
+    await revisarMutation.mutateAsync().catch(() => {});
+    liberarMutation.mutate(revisaoContrato.id);
   };
 
   const handleCopyLink = (id: string) => {
@@ -384,20 +336,35 @@ export default function ContratosPage() {
                         {formatBRL(contrato.valor_final_mensal)}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="secondary"
-                          className={`text-[10px] font-bold uppercase tracking-wider py-0.5 px-2.5 rounded-full border ${
-                            contrato.status === "assinado"
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                              : contrato.status === "pendente_assinatura"
-                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                              : "bg-zinc-800 text-zinc-500 border-zinc-700/50"
-                          }`}
-                        >
-                          {contrato.status === "pendente_assinatura"
-                            ? "pendente assinatura"
-                            : contrato.status}
-                        </Badge>
+                        <div className="flex flex-col gap-1.5">
+                          <Badge
+                            variant="secondary"
+                            className={`text-[10px] font-bold uppercase tracking-wider py-0.5 px-2.5 rounded-full border w-fit ${
+                              contrato.status === "assinado"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : contrato.status === "pendente_assinatura"
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                : contrato.status === "pendente_financeiro"
+                                ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
+                                : "bg-zinc-800 text-zinc-500 border-zinc-700/50"
+                            }`}
+                          >
+                            {contrato.status === "pendente_assinatura"
+                              ? "pendente assinatura"
+                              : contrato.status === "pendente_financeiro"
+                              ? "aguardando revisão"
+                              : contrato.status}
+                          </Badge>
+                          {contrato.assinatura_iniciada_em ? (
+                            <span className="text-[11px] font-medium text-violet-400/90 leading-tight">
+                              Assinatura iniciada ·{" "}
+                              <ClientDate
+                                iso={contrato.assinatura_iniciada_em}
+                                className="text-violet-400/90"
+                              />
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell className="text-zinc-400 text-xs">
                         {contrato.assinado_em ? (
@@ -411,6 +378,17 @@ export default function ContratosPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2 flex-wrap">
+                          {contrato.status === "pendente_financeiro" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openRevisaoModal(contrato)}
+                              className="h-7 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                            >
+                              <Pencil className="size-3 mr-1" />
+                              Revisar e editar
+                            </Button>
+                          )}
                           {contrato.status === "assinado" && (
                             <Button
                               size="sm"
@@ -422,17 +400,19 @@ export default function ContratosPage() {
                               Trilha de Auditoria
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCopyLink(contrato.id)}
-                            className="h-7 text-xs border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                          >
-                            <Link2 className="size-3 mr-1" />
-                            Link Assinatura
-                          </Button>
+                          {contrato.status !== "pendente_financeiro" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleCopyLink(contrato.id)}
+                              className="h-7 text-xs border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                            >
+                              <Link2 className="size-3 mr-1" />
+                              Link Assinatura
+                            </Button>
+                          )}
                           <a
-                            href={`/contrato/${contrato.id}`}
+                            href={`/contrato/${contrato.id}?painel=admin`}
                             target="_blank"
                             rel="noopener noreferrer"
                           >
@@ -472,7 +452,7 @@ export default function ContratosPage() {
 
             <div className="grid gap-4 py-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="proposta" className="text-zinc-300 text-xs">Proposta Aceita *</Label>
+                <Label htmlFor="proposta">Proposta Aceita *</Label>
                 <Select
                   value={selectedPropostaId}
                   onValueChange={(value) => value && handlePropostaChange(value)}
@@ -495,7 +475,7 @@ export default function ContratosPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="finalSetup" className="text-zinc-300 text-xs">Valor Final Setup (R$)</Label>
+                  <Label htmlFor="finalSetup">Valor Final Setup (R$)</Label>
                   <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-3 h-9">
                     <DollarSign className="size-4 text-zinc-500" />
                     <input
@@ -509,7 +489,7 @@ export default function ContratosPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="finalMensal" className="text-zinc-300 text-xs">Valor Final Mensalidade (R$)</Label>
+                  <Label htmlFor="finalMensal">Valor Final Mensalidade (R$)</Label>
                   <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-3 h-9">
                     <DollarSign className="size-4 text-zinc-500" />
                     <input
@@ -525,7 +505,7 @@ export default function ContratosPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="detalhes" className="text-zinc-300 text-xs">Observações / Detalhes Financeiros</Label>
+                <Label htmlFor="detalhes">Observações / Detalhes Financeiros</Label>
                 <Input
                   id="detalhes"
                   value={detalhesFinanceiros}
@@ -536,7 +516,7 @@ export default function ContratosPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="conteudo" className="text-zinc-300 text-xs">Texto Jurídico do Contrato</Label>
+                <Label htmlFor="conteudo">Texto Jurídico do Contrato</Label>
                 <textarea
                   id="conteudo"
                   value={conteudoContrato}
@@ -562,7 +542,7 @@ export default function ContratosPage() {
                 disabled={generateContractMutation.isPending}
                 className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-medium rounded-lg"
               >
-                {generateContractMutation.isPending ? "Gerando..." : "Gerar e Enviar para Assinatura"}
+                {generateContractMutation.isPending ? "Gerando..." : "Gerar para Revisão Financeira"}
               </Button>
             </DialogFooter>
           </form>
@@ -599,7 +579,7 @@ export default function ContratosPage() {
             </p>
           )}
 
-          {evidencias && <EvidenciasPanel evidencias={evidencias} />}
+          {evidencias && <ContratoEvidenciasPanel evidencias={evidencias} />}
 
           <DialogFooter className="mt-4">
             <Button
@@ -610,6 +590,106 @@ export default function ContratosPage() {
               Fechar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revisão financeira */}
+      <Dialog
+        open={!!revisaoContrato}
+        onOpenChange={(open) => {
+          if (!open) setRevisaoContrato(null);
+        }}
+      >
+        <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-xl) max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleSalvarRevisao}>
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+                <Pencil className="size-5 text-violet-400" />
+                Revisar contrato
+              </DialogTitle>
+              <DialogDescription className="text-zinc-400 text-sm">
+                Edite o contrato antes de liberar para assinatura do cliente. Após validar, use
+                &quot;Liberar para assinatura&quot; para enviar o e-mail ao cliente.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="revisaoSetup">Valor Final Setup (R$)</Label>
+                  <Input
+                    id="revisaoSetup"
+                    type="number"
+                    value={revisaoSetup}
+                    onChange={(e) => setRevisaoSetup(e.target.value)}
+                    required
+                    className="bg-zinc-900 border-zinc-800"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="revisaoMensal">Valor Final Mensalidade (R$)</Label>
+                  <Input
+                    id="revisaoMensal"
+                    type="number"
+                    value={revisaoMensal}
+                    onChange={(e) => setRevisaoMensal(e.target.value)}
+                    required
+                    className="bg-zinc-900 border-zinc-800"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="revisaoDetalhes">Detalhes financeiros</Label>
+                <Input
+                  id="revisaoDetalhes"
+                  value={revisaoDetalhes}
+                  onChange={(e) => setRevisaoDetalhes(e.target.value)}
+                  className="bg-zinc-900 border-zinc-800"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="revisaoConteudo">Texto do contrato</Label>
+                <textarea
+                  id="revisaoConteudo"
+                  value={revisaoConteudo}
+                  onChange={(e) => setRevisaoConteudo(e.target.value)}
+                  required
+                  rows={12}
+                  className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-zinc-100 text-sm outline-none focus:border-[#09A3E9]/50 w-full font-mono"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-4 gap-2 flex-wrap">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setRevisaoContrato(null)}
+                className="text-zinc-400 hover:text-white"
+              >
+                Fechar
+              </Button>
+              <Button
+                type="submit"
+                disabled={revisarMutation.isPending}
+                variant="outline"
+                className="border-zinc-700"
+              >
+                {revisarMutation.isPending ? "Salvando..." : "Salvar alterações"}
+              </Button>
+              <Button
+                type="button"
+                disabled={liberarMutation.isPending || revisarMutation.isPending}
+                onClick={handleLiberarAssinatura}
+                className="bg-emerald-600 hover:bg-emerald-600/90 text-white"
+              >
+                <Send className="size-4 mr-1" />
+                {liberarMutation.isPending ? "Liberando..." : "Liberar para assinatura"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

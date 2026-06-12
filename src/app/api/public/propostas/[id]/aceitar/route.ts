@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api/auth";
 import { getAdminSupabase } from "@/lib/api/admin-db";
-import { notifyPropostaAceita, notifyPropostaAceitaCliente, notifyContratoProntoAssinatura } from "@/lib/email/notifications";
+import {
+  notifyPropostaAceita,
+  notifyPropostaAceitaCliente,
+  notifyContratoDisponivelRevisaoFinanceiro,
+} from "@/lib/email/notifications";
 import { generateContractFromProposta } from "@/lib/auto-contract";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -51,9 +55,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       .eq("id", proposta.cliente_id)
       .single();
 
+    const aceitaEm = new Date().toISOString();
     const { data: updated, error: updateError } = await supabase
       .from("propostas")
-      .update({ status: "aceita" })
+      .update({ status: "aceita", aceita_em: aceitaEm })
       .eq("id", id)
       .select()
       .single();
@@ -85,9 +90,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
 
     try {
-      await notifyContratoProntoAssinatura(contrato.id, proposta.cliente_id, clienteContato);
+      await notifyContratoDisponivelRevisaoFinanceiro(
+        contrato.id,
+        proposta.cliente_id
+      );
     } catch (e) {
-      console.error("[email] notifyContratoProntoAssinatura falhou:", e);
+      console.error("[email] notifyContratoDisponivelRevisaoFinanceiro falhou:", e);
     }
 
     return jsonResponse({ proposta: updated, contrato });

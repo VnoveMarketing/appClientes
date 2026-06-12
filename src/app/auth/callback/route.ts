@@ -10,8 +10,17 @@ export async function GET(request: Request) {
   if (code) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
+    const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && sessionData.user) {
+      await supabase
+        .from("profiles")
+        .update({
+          convite_status: "aceito",
+          convite_aceito_em: new Date().toISOString(),
+          ativo: true,
+        })
+        .eq("id", sessionData.user.id);
+
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

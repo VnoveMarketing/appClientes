@@ -2,7 +2,7 @@ import { Resend } from "resend";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail =
-  process.env.RESEND_FROM_EMAIL ?? "V9nove CRM <criacao@vnove.com.br>";
+  process.env.RESEND_FROM_EMAIL ?? "Agência Vnove CRM <criacao@vnove.com.br>";
 const replyTo = process.env.RESEND_REPLY_TO ?? "criacao@vnove.com.br";
 
 let resendClient: Resend | null = null;
@@ -46,7 +46,7 @@ export async function sendEmail(params: {
     console.warn(
       "[email] RESEND_FROM_EMAIL usa domínio de teste (onboarding@resend.dev). " +
         "E-mails a clientes externos não serão entregues. Configure um domínio verificado, ex.: " +
-        "RESEND_FROM_EMAIL=V9nove CRM <criacao@vnove.com.br>"
+        "RESEND_FROM_EMAIL=Agência Vnove CRM <criacao@vnove.com.br>"
     );
   }
 

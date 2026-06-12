@@ -12,6 +12,9 @@ export interface Cliente {
   cnpj?: string;
   cidade?: string;
   estado?: string;
+  cor_principal?: string | null;
+  logo_url?: string | null;
+  categoria_case_id?: string | null;
   status: 'Ativa' | 'Bloqueada' | 'Pendente';
   assinatura: 'active' | 'canceled';
   cliente_desde: string;
@@ -32,6 +35,8 @@ export interface Proposta {
   tipo_servico_id?: string | null;
   campos_valores?: Record<string, string | number | null>;
   status: 'pendente' | 'aceita' | 'em_analise' | 'contrato_gerado';
+  visualizada_em?: string | null;
+  aceita_em?: string | null;
   created_at: string;
 }
 
@@ -46,6 +51,8 @@ export interface Contrato {
   conteudo_contrato: string;
   documento_hash_sha256?: string | null;
   assinado_em?: string;
+  assinatura_iniciada_em?: string | null;
+  liberado_para_assinatura_em?: string | null;
   created_at: string;
 }
 
@@ -158,7 +165,7 @@ const SEED_CONTRATOS: Contrato[] = [
     valor_final_setup: 5000,
     valor_final_mensal: 3988,
     detalhes_financeiros: "Pagamento do setup em 2x no boleto bancário.",
-    conteudo_contrato: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MARKETING DIGITAL\n\nCONTRATANTE: VNOVE\nCONTRATADA: Agencia V9nove\n\nObjeto: Prestação de serviços de CRM, Funis de vendas, Chat ao vivo, e API de WhatsApp.\n\nValores:\nSetup: R$ 5.000,00\nMensalidade: R$ 3.988,00 mensais por 12 meses.",
+    conteudo_contrato: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MARKETING DIGITAL\n\nCONTRATANTE: VNOVE\nCONTRATADA: Agência Vnove\n\nObjeto: Prestação de serviços de CRM, Funis de vendas, Chat ao vivo, e API de WhatsApp.\n\nValores:\nSetup: R$ 5.000,00\nMensalidade: R$ 3.988,00 mensais por 12 meses.",
     assinado_em: "2026-05-26T09:00:00Z",
     created_at: "2026-05-25T16:00:00Z"
   }

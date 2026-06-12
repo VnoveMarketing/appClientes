@@ -40,9 +40,18 @@ import {
   FileText,
   FileCheck,
   Eye,
+  ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthUser, canAccessContratos } from "@/hooks/use-auth";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { normalizeHexColor } from "@/lib/cases";
 
 export default function ClientesPage() {
   const queryClient = useQueryClient();
@@ -59,6 +68,11 @@ export default function ClientesPage() {
   const [email, setEmail] = useState("");
   const [telefone, setTelefone] = useState("");
   const [empresa, setEmpresa] = useState("");
+  const [corPrincipal, setCorPrincipal] = useState("#666666");
+  const [categoriaCaseId, setCategoriaCaseId] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   // TanStack Query fetching
   const { data: clientes = [], isLoading } = useQuery({
@@ -77,22 +91,19 @@ export default function ClientesPage() {
     enabled: canViewContratos,
   });
 
+  const { data: caseCategorias = [] } = useQuery({
+    queryKey: ["case-categorias"],
+    queryFn: dbService.getCaseCategorias,
+  });
+
   // Mutations
   const addMutation = useMutation({
     mutationFn: dbService.addCliente,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clientes"] });
-      closeModal();
-    },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Cliente> }) =>
       dbService.updateCliente(id, updates),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clientes"] });
-      closeModal();
-    },
   });
 
   const deleteMutation = useMutation({
@@ -111,6 +122,10 @@ export default function ClientesPage() {
     setEmail("");
     setTelefone("");
     setEmpresa("");
+    setCorPrincipal("#666666");
+    setCategoriaCaseId("");
+    setLogoFile(null);
+    setLogoPreview(null);
     setIsModalOpen(true);
   };
 
@@ -122,6 +137,10 @@ export default function ClientesPage() {
     setEmail(cliente.email);
     setTelefone(cliente.telefone || "");
     setEmpresa(cliente.empresa || "");
+    setCorPrincipal(cliente.cor_principal ?? "#666666");
+    setCategoriaCaseId(cliente.categoria_case_id ?? "");
+    setLogoFile(null);
+    setLogoPreview(cliente.logo_url ?? null);
     setIsModalOpen(true);
   };
 
@@ -129,23 +148,49 @@ export default function ClientesPage() {
     setIsModalOpen(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const corNormalizada = normalizeHexColor(corPrincipal);
 
     const payload = {
       nome: `${nome} ${sobrenome}`.trim(),
       email,
       telefone,
       empresa,
-      status: (selectedCliente ? selectedCliente.status : "Ativa") as any,
-      assinatura: (selectedCliente ? selectedCliente.assinatura : "active") as any,
+      cor_principal: corNormalizada,
+      categoria_case_id: categoriaCaseId || null,
+      status: (selectedCliente ? selectedCliente.status : "Ativa") as Cliente["status"],
+      assinatura: (selectedCliente ? selectedCliente.assinatura : "active") as Cliente["assinatura"],
     };
 
-    if (selectedCliente) {
-      updateMutation.mutate({ id: selectedCliente.id, updates: payload });
-    } else {
-      addMutation.mutate(payload);
+    try {
+      if (selectedCliente) {
+        await updateMutation.mutateAsync({ id: selectedCliente.id, updates: payload });
+        if (logoFile) {
+          await dbService.uploadClienteLogo(selectedCliente.id, logoFile);
+        }
+      } else {
+        const created = await addMutation.mutateAsync(payload);
+        if (logoFile) {
+          await dbService.uploadClienteLogo(created.id, logoFile);
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["clientes"] });
+      closeModal();
+    } catch {
+      // mutations já tratam erro via estado
     }
+  };
+
+  const handleLogoChange = (file: File | undefined) => {
+    if (!file) return;
+    if (file.type !== "image/png") {
+      alert("O logo do cliente deve ser PNG.");
+      return;
+    }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
   };
 
   const handleDelete = (id: string) => {
@@ -154,7 +199,11 @@ export default function ClientesPage() {
     }
   };
 
-  // Filtering
+  const categoriaCaseLabel =
+    categoriaCaseId === ""
+      ? null
+      : caseCategorias.find((cat) => cat.id === categoriaCaseId)?.nome ?? null;
+
   const filteredClientes = clientes.filter((c) => {
     const term = filterText.toLowerCase();
     return (
@@ -429,7 +478,7 @@ export default function ClientesPage() {
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="nome" className="text-zinc-300 text-xs">Nome</Label>
+                  <Label htmlFor="nome">Nome</Label>
                   <Input
                     id="nome"
                     value={nome}
@@ -440,7 +489,7 @@ export default function ClientesPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sobrenome" className="text-zinc-300 text-xs">Sobrenome</Label>
+                  <Label htmlFor="sobrenome">Sobrenome</Label>
                   <Input
                     id="sobrenome"
                     value={sobrenome}
@@ -453,7 +502,7 @@ export default function ClientesPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email" className="text-zinc-300 text-xs">Email do Dono</Label>
+                <Label htmlFor="email">Email do Dono</Label>
                 <Input
                   id="email"
                   type="email"
@@ -466,7 +515,7 @@ export default function ClientesPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="telefone" className="text-zinc-300 text-xs">Telefone</Label>
+                <Label htmlFor="telefone">Telefone</Label>
                 <Input
                   id="telefone"
                   value={telefone}
@@ -478,7 +527,7 @@ export default function ClientesPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="empresa" className="text-zinc-300 text-xs">Nome da Empresa</Label>
+                <Label htmlFor="empresa">Nome da Empresa</Label>
                 <Input
                   id="empresa"
                   value={empresa}
@@ -487,6 +536,79 @@ export default function ClientesPage() {
                   placeholder="Nome Fantasia / Razão Social"
                   className="bg-zinc-900 border-zinc-800 text-white text-sm"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="cor-principal">Cor principal</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="cor-principal-picker"
+                      type="color"
+                      value={normalizeHexColor(corPrincipal) ?? "#666666"}
+                      onChange={(e) => setCorPrincipal(e.target.value.toUpperCase())}
+                      className="h-10 w-12 rounded border border-zinc-800 bg-zinc-900 cursor-pointer"
+                    />
+                    <Input
+                      id="cor-principal"
+                      value={corPrincipal}
+                      onChange={(e) => setCorPrincipal(e.target.value)}
+                      placeholder="#RRGGBB"
+                      className="bg-zinc-900 border-zinc-800 text-white text-sm font-mono"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Categoria de cases</Label>
+                  <Select
+                    value={categoriaCaseId || "none"}
+                    onValueChange={(v) => setCategoriaCaseId(!v || v === "none" ? "" : v)}
+                  >
+                    <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white text-sm">
+                      <SelectValue placeholder="Selecione">
+                        {categoriaCaseId === "" ? null : categoriaCaseLabel}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#1c1c1e] border-zinc-800 text-zinc-200">
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {caseCategorias.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>Logo do cliente (PNG)</Label>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png"
+                  className="hidden"
+                  onChange={(e) => handleLogoChange(e.target.files?.[0])}
+                />
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-zinc-700 text-zinc-300"
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    <ImageIcon className="size-4 mr-2" />
+                    {logoPreview ? "Trocar logo" : "Enviar logo"}
+                  </Button>
+                  {logoPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={logoPreview}
+                      alt="Logo do cliente"
+                      className="h-12 max-w-[120px] object-contain rounded border border-zinc-800 bg-zinc-950 px-2"
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
 
@@ -502,8 +624,13 @@ export default function ClientesPage() {
               <Button
                 type="submit"
                 className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-medium rounded-lg"
+                disabled={addMutation.isPending || updateMutation.isPending}
               >
-                {selectedCliente ? "Salvar Alterações" : "Avançar"}
+                {addMutation.isPending || updateMutation.isPending
+                  ? "Salvando..."
+                  : selectedCliente
+                  ? "Salvar Alterações"
+                  : "Avançar"}
               </Button>
             </DialogFooter>
           </form>

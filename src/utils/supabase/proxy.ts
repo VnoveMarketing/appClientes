@@ -67,7 +67,16 @@ export async function updateSession(request: NextRequest) {
         .eq("id", userId)
         .maybeSingle();
 
-      if (profile?.role === "consultor") {
+      const isUsuariosConfig =
+        pathname.startsWith("/configuracoes/usuarios") ||
+        pathname.startsWith("/configuracoes/tipos-usuario") ||
+        pathname.startsWith("/configuracoes/permissoes");
+
+      if (isUsuariosConfig && profile?.role !== "admin") {
+        return NextResponse.redirect(new URL("/clientes", request.url));
+      }
+
+      if (profile?.role === "consultor" && !isUsuariosConfig) {
         return NextResponse.redirect(new URL("/clientes", request.url));
       }
     }

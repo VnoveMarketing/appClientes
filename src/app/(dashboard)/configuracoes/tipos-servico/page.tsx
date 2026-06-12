@@ -186,7 +186,7 @@ export default function TiposServicoPage() {
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-zinc-300">Nome *</Label>
+                <Label>Nome *</Label>
                 <Input
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
@@ -195,7 +195,7 @@ export default function TiposServicoPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-zinc-300">Descrição</Label>
+                <Label>Descrição</Label>
                 <Input
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
@@ -221,7 +221,7 @@ export default function TiposServicoPage() {
                   <div key={idx} className="p-2 rounded bg-zinc-950 border border-zinc-800 space-y-2">
                     <div className="grid grid-cols-12 gap-2 items-end">
                       <div className="col-span-2">
-                        <Label className="text-[10px] text-zinc-500">Chave</Label>
+                        <Label className="text-xs text-zinc-300">Chave</Label>
                         <Input
                           value={campo.chave}
                           onChange={(e) => {
@@ -230,11 +230,11 @@ export default function TiposServicoPage() {
                             setCampos(next);
                           }}
                           placeholder="valor_total"
-                          className="bg-zinc-900 border-zinc-800 h-8 text-xs"
+                          className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                         />
                       </div>
                       <div className="col-span-3">
-                        <Label className="text-[10px] text-zinc-500">Label</Label>
+                        <Label className="text-xs text-zinc-300">Label</Label>
                         <Input
                           value={campo.label}
                           onChange={(e) => {
@@ -243,11 +243,11 @@ export default function TiposServicoPage() {
                             setCampos(next);
                           }}
                           placeholder="Valor total"
-                          className="bg-zinc-900 border-zinc-800 h-8 text-xs"
+                          className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                         />
                       </div>
                       <div className="col-span-2">
-                        <Label className="text-[10px] text-zinc-500">Tipo</Label>
+                        <Label className="text-xs text-zinc-300">Tipo</Label>
                         <Select
                           value={campo.tipo_campo}
                           onValueChange={(v) => {
@@ -268,7 +268,7 @@ export default function TiposServicoPage() {
                             setCampos(next);
                           }}
                         >
-                          <SelectTrigger className="bg-zinc-900 border-zinc-800 h-8 text-xs">
+                          <SelectTrigger className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-zinc-900 border-zinc-800">
@@ -283,7 +283,7 @@ export default function TiposServicoPage() {
                       <div className="col-span-4">
                         {campo.tipo_campo !== "calculated" ? (
                           <>
-                            <Label className="text-[10px] text-zinc-500">Placeholder</Label>
+                            <Label className="text-xs text-zinc-300">Placeholder</Label>
                             <Input
                               value={campo.placeholder}
                               onChange={(e) => {
@@ -291,7 +291,7 @@ export default function TiposServicoPage() {
                                 next[idx] = { ...campo, placeholder: e.target.value };
                                 setCampos(next);
                               }}
-                              className="bg-zinc-900 border-zinc-800 h-8 text-xs"
+                              className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                             />
                           </>
                         ) : (
@@ -316,7 +316,7 @@ export default function TiposServicoPage() {
                     {campo.tipo_campo === "calculated" && (
                       <div className="grid grid-cols-12 gap-2 items-end pl-1">
                         <div className="col-span-3">
-                          <Label className="text-[10px] text-zinc-500">Operação</Label>
+                          <Label className="text-xs text-zinc-300">Operação</Label>
                           <Select
                             value={campo.calculo?.operacao ?? "multiply"}
                             onValueChange={(v) => {
@@ -332,7 +332,7 @@ export default function TiposServicoPage() {
                               setCampos(next);
                             }}
                           >
-                            <SelectTrigger className="bg-zinc-900 border-zinc-800 h-8 text-xs">
+                            <SelectTrigger className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-zinc-900 border-zinc-800">
@@ -342,7 +342,7 @@ export default function TiposServicoPage() {
                           </Select>
                         </div>
                         <div className="col-span-8">
-                          <Label className="text-[10px] text-zinc-500">
+                          <Label className="text-xs text-zinc-300">
                             Campos operandos (chaves separadas por vírgula)
                           </Label>
                           <Input
@@ -399,7 +399,7 @@ export default function TiposServicoPage() {
                           setEntregaveis(next);
                         }}
                         placeholder="Nome do entregável"
-                        className="bg-zinc-900 border-zinc-800 h-8 text-xs"
+                        className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                       />
                     </div>
                     <div className="col-span-7">
@@ -411,7 +411,7 @@ export default function TiposServicoPage() {
                           setEntregaveis(next);
                         }}
                         placeholder="Descrição"
-                        className="bg-zinc-900 border-zinc-800 h-8 text-xs"
+                        className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                       />
                     </div>
                     <div className="col-span-1">

@@ -1,17 +1,20 @@
 "use client";
 
-import React, { use } from "react";
+import React, { use, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import { normalizeEscopo } from "@/lib/escopo";
 import Link from "next/link";
+import { AgencyLogo } from "@/components/agency-brand";
+import type { CasePortfolio } from "@/lib/types";
 
-const NAV_SECTIONS = [
-  { id: "sobre", num: "01", label: "Agência" },
-  { id: "escopo", num: "02", label: "Escopo" },
-  { id: "processo", num: "03", label: "Processo" },
-  { id: "investimento", num: "04", label: "Valores" },
-  { id: "aceite", num: "05", label: "Aceite" },
+const BASE_SECTIONS = [
+  { id: "sobre", label: "Agência", showWhenCases: false },
+  { id: "cases", label: "Cases", showWhenCases: true },
+  { id: "escopo", label: "Escopo", showWhenCases: false },
+  { id: "processo", label: "Processo", showWhenCases: false },
+  { id: "investimento", label: "Valores", showWhenCases: false },
+  { id: "aceite", label: "Aceite", showWhenCases: false },
 ];
 
 export default function PropostaPublicPage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,6 +27,28 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
 
   const proposta = data?.proposta;
   const client = data?.cliente;
+  const portfolioCases = (data?.cases ?? []) as CasePortfolio[];
+
+  const navSections = BASE_SECTIONS.filter(
+    (section) => !section.showWhenCases || portfolioCases.length > 0
+  ).map((section, index) => ({
+    id: section.id,
+    label: section.label,
+    num: String(index + 1).padStart(2, "0"),
+  }));
+
+  const sectionIndex = (id: string) =>
+    String(navSections.findIndex((s) => s.id === id) + 1).padStart(2, "0");
+
+  const clientAccent = client?.cor_principal ?? undefined;
+  const brandedStyle = clientAccent
+    ? ({ "--prop-client-accent": clientAccent } as React.CSSProperties)
+    : undefined;
+
+  useEffect(() => {
+    if (!proposta) return;
+    dbService.trackPropostaVisualizada(id).catch(() => {});
+  }, [id, proposta?.id]);
 
   if (isLoading) {
     return (
@@ -73,37 +98,49 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
     proposta.duracao === 0 ? "Prazo indeterminado" : `${proposta.duracao} meses`;
 
   return (
-    <>
+    <div className="prop-branded" style={brandedStyle}>
       <nav className="prop-nav">
         <a href="#top" className="prop-nav-logo">
-          V<span>9</span>NOVE
+          <AgencyLogo height={32} />
         </a>
         <span className="prop-nav-date">{createdDate}</span>
       </nav>
 
       {/* Hero */}
       <section className="prop-hero" id="top">
-        <div className="prop-hero-inner">
-          <div className="prop-kicker">Proposta Comercial · V9nove</div>
-          <h1 className="prop-hero-title">
-            PROPOSTA<br />
-            <em>COMERCIAL</em>
-          </h1>
-          <div className="prop-hero-client">{clientName}</div>
-          <p className="prop-hero-desc">
-            Solução completa de <strong>marketing digital e CRM</strong> para estruturar,
-            acelerar e escalar os resultados da sua empresa.
-          </p>
-          {proposta.condicao_descricao && proposta.condicao_descricao !== "Nenhuma" && (
-            <span className="prop-badge">{proposta.condicao_descricao}</span>
-          )}
+        <div className="prop-hero-inner prop-hero-split">
+          <div className="prop-hero-content">
+            <div className="prop-kicker">Proposta Comercial · Agência Vnove</div>
+            <h1 className="prop-hero-title">
+              PROPOSTA<br />
+              <em>COMERCIAL</em>
+            </h1>
+            <div className="prop-hero-client">{clientName}</div>
+            <p className="prop-hero-desc">
+              Solução completa de <strong>marketing digital e CRM</strong> para estruturar,
+              acelerar e escalar os resultados da sua empresa.
+            </p>
+            {proposta.condicao_descricao && proposta.condicao_descricao !== "Nenhuma" && (
+              <span className="prop-badge">{proposta.condicao_descricao}</span>
+            )}
+          </div>
+          {client?.logo_url ? (
+            <div className="prop-hero-brand">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={client.logo_url}
+                alt={clientName}
+                className="prop-hero-client-logo"
+              />
+            </div>
+          ) : null}
         </div>
       </section>
 
       {/* Section nav */}
       <div className="prop-pnav-wrap">
         <div className="prop-pnav">
-          {NAV_SECTIONS.map((s) => (
+          {navSections.map((s) => (
             <a key={s.id} href={`#${s.id}`} className="prop-pnav-item">
               <span className="prop-pnav-num">{s.num}</span>
               <span className="prop-pnav-name">{s.label}</span>
@@ -116,14 +153,14 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
       <div className="prop-divider" />
       <section className="prop-sec-bg" id="sobre">
         <div className="prop-sec">
-          <div className="prop-s-label">01 — Quem Somos</div>
+          <div className="prop-s-label">{sectionIndex("sobre")} — Quem Somos</div>
           <h2 className="prop-sec-title">
-            WE ARE <em>V9NOVE</em>
+            WE ARE <em>VNOVE</em>
           </h2>
           <div className="prop-intro-grid">
             <div>
               <p className="prop-sec-desc" style={{ marginBottom: 16 }}>
-                A V9 é uma agência <strong>full service</strong>, com mais de 20 anos de
+                A Agência Vnove é uma agência <strong>full service</strong>, com mais de 20 anos de
                 experiência no mercado e equipe pronta para planejar, implementar e mensurar
                 resultados de campanhas online e offline de forma integrada.
               </p>
@@ -154,11 +191,63 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
         </div>
       </section>
 
-      {/* 02 — Escopo */}
+      {portfolioCases.length > 0 ? (
+        <>
+          <div className="prop-divider" />
+          <section className="prop-sec-bg2" id="cases">
+            <div className="prop-sec">
+              <div className="prop-s-label">{sectionIndex("cases")} — Portfólio</div>
+              <h2 className="prop-sec-title">
+                CASES <em>RELACIONADOS</em>
+              </h2>
+              <p className="prop-sec-desc">
+                Projetos selecionados com resultados relevantes para o seu segmento.
+              </p>
+              <div className="prop-cases-grid">
+                {portfolioCases.map((item) => {
+                  const card = (
+                    <>
+                      <div className="prop-case-media">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.imagem_url} alt={item.nome} />
+                      </div>
+                      <div className="prop-case-body">
+                        <div className="prop-case-name">{item.nome}</div>
+                      </div>
+                    </>
+                  );
+
+                  if (item.link) {
+                    return (
+                      <a
+                        key={item.id}
+                        href={item.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="prop-case-card"
+                      >
+                        {card}
+                      </a>
+                    );
+                  }
+
+                  return (
+                    <div key={item.id} className="prop-case-card">
+                      {card}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {/* Escopo */}
       <div className="prop-divider" />
       <section className="prop-sec-bg2" id="escopo">
         <div className="prop-sec">
-          <div className="prop-s-label">02 — Entregáveis</div>
+          <div className="prop-s-label">{sectionIndex("escopo")} — Entregáveis</div>
           <h2 className="prop-sec-title">
             ESCOPO DA <em>SOLUÇÃO</em>
           </h2>
@@ -192,7 +281,7 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
       <div className="prop-divider" />
       <section className="prop-sec-bg" id="processo">
         <div className="prop-sec">
-          <div className="prop-s-label">03 — Ciclo de Atendimento</div>
+          <div className="prop-s-label">{sectionIndex("processo")} — Ciclo de Atendimento</div>
           <h2 className="prop-sec-title">
             ONBOARDING <em>E ROTINA</em>
           </h2>
@@ -232,7 +321,7 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
       <div className="prop-divider" />
       <section className="prop-sec-bg2" id="investimento">
         <div className="prop-sec">
-          <div className="prop-s-label">04 — Investimento</div>
+          <div className="prop-s-label">{sectionIndex("investimento")} — Investimento</div>
           <h2 className="prop-sec-title">
             VALORES DO <em>PROJETO</em>
           </h2>
@@ -326,7 +415,7 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
       <div className="prop-divider" />
       <section className="prop-sec-bg" id="aceite">
         <div className="prop-sec">
-          <div className="prop-s-label">05 — Termos</div>
+          <div className="prop-s-label">{sectionIndex("aceite")} — Termos</div>
           <h2 className="prop-sec-title">
             NÃO ESTÃO <em>INCLUSOS</em>
           </h2>
@@ -391,13 +480,13 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
 
       <footer className="prop-footer">
         <div className="prop-footer-inner">
-          <div className="prop-footer-copy">
-            <span className="prop-footer-dot" />
-            Agência de Marketing V9nove · Limeira/SP
+          <div className="prop-footer-copy prop-footer-brand">
+            <AgencyLogo height={20} />
+            <span>Limeira/SP</span>
           </div>
           <div className="prop-footer-copy">vnove.com.br</div>
         </div>
       </footer>
-    </>
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import React, { useState, use } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import Link from "next/link";
+import { AgencyLogo } from "@/components/agency-brand";
 import { useRouter } from "next/navigation";
 
 export default function AceitarPropostaPage({ params }: { params: Promise<{ id: string }> }) {
@@ -195,7 +196,7 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
     <>
       <nav className="prop-nav">
         <Link href={`/proposta/${id}`} className="prop-nav-logo">
-          V<span>9</span>NOVE
+          <AgencyLogo height={32} />
         </Link>
         <span className="prop-nav-date">Aceite da proposta</span>
       </nav>
@@ -394,9 +395,9 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
 
       <footer className="prop-footer">
         <div className="prop-footer-inner">
-          <div className="prop-footer-copy">
-            <span className="prop-footer-dot" />
-            Agência de Marketing V9nove · Limeira/SP
+          <div className="prop-footer-copy prop-footer-brand">
+            <AgencyLogo height={20} />
+            <span>Limeira/SP</span>
           </div>
           <div className="prop-footer-copy">vnove.com.br</div>
         </div>

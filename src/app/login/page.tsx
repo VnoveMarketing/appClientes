@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Lock, Mail, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { AgencyLogo } from "@/components/agency-brand";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,10 +42,8 @@ export default function LoginPage() {
 
       <Card className="bg-[#161616] border border-zinc-800/80 max-w-sm w-full shadow-2xl p-6 md:p-8">
         <CardHeader className="p-0 mb-6 text-center">
-          <div className="flex justify-center items-center gap-1.5 select-none mb-3">
-            <span className="text-3xl font-black text-white tracking-wider">VN</span>
-            <span className="text-3xl font-black text-[#09A3E9] tracking-wider">9</span>
-            <span className="text-3xl font-black text-white tracking-wider">VE</span>
+          <div className="flex justify-center mb-3">
+            <AgencyLogo height={40} />
           </div>
           <CardTitle className="text-lg font-bold text-white mt-4">Acesso ao Portal Interno</CardTitle>
           <CardDescription className="text-zinc-500 text-xs mt-1">

@@ -55,3 +55,7 @@ export function canAccessContratos(role?: UserRole) {
 export function canAccessConfig(role?: UserRole) {
   return role === "admin" || role === "financeiro";
 }
+
+export function canAccessUsuarios(role?: UserRole) {
+  return role === "admin";
+}

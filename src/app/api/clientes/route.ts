@@ -19,7 +19,20 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { nome, email, telefone, empresa, status, assinatura, ramo_atividade, cnpj, cidade, estado } = body;
+  const {
+    nome,
+    email,
+    telefone,
+    empresa,
+    status,
+    assinatura,
+    ramo_atividade,
+    cnpj,
+    cidade,
+    estado,
+    cor_principal,
+    categoria_case_id,
+  } = body;
 
   if (!nome || !email || !telefone || !empresa) {
     return errorResponse("Campos obrigatórios: nome, email, telefone, empresa");
@@ -39,6 +52,8 @@ export async function POST(request: NextRequest) {
         cnpj: cnpj ?? null,
         cidade: cidade ?? null,
         estado: estado ?? null,
+        cor_principal: cor_principal ?? null,
+        categoria_case_id: categoria_case_id ?? null,
       },
     ])
     .select()

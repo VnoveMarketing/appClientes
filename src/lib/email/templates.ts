@@ -1,3 +1,6 @@
+import { getAppUrl } from "@/lib/email/resend";
+import { AGENCY_LOGO_SRC } from "@/lib/brand";
+
 type EmailTemplateParams = {
   title: string;
   greeting?: string;
@@ -23,7 +26,7 @@ export function buildEmailText({
   if (footerNote) {
     lines.push("", footerNote);
   }
-  lines.push("", "—", "Agência V9nove · Mensagem automática do sistema");
+  lines.push("", "—", "Agência Vnove · Mensagem automática do sistema");
   return lines.join("\n");
 }
 
@@ -57,6 +60,8 @@ export function buildEmailHtml({
     ? `<p style="margin: 24px 0 0; font-size: 12px; color: #71717a; line-height: 1.5;">${footerNote}</p>`
     : "";
 
+  const logoUrl = `${getAppUrl()}${AGENCY_LOGO_SRC}`;
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
   <head>
@@ -70,8 +75,8 @@ export function buildEmailHtml({
         <td align="center">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 560px; background-color: #161616; border: 1px solid #27272a; border-radius: 12px; overflow: hidden;">
             <tr>
-              <td style="background-color: #09A3E9; padding: 20px 32px;">
-                <span style="color: #ffffff; font-size: 18px; font-weight: 800; letter-spacing: -0.02em;">V9nove CRM</span>
+              <td style="background-color: #0B0B0B; padding: 20px 32px; border-bottom: 1px solid #27272a;">
+                <img src="${logoUrl}" alt="Agência Vnove" height="28" style="height: 28px; width: auto; display: block;" />
               </td>
             </tr>
             <tr>
@@ -87,7 +92,7 @@ export function buildEmailHtml({
             </tr>
             <tr>
               <td style="padding: 16px 32px; border-top: 1px solid #27272a; font-size: 11px; color: #52525b; text-align: center;">
-                Agência V9nove · Mensagem automática do sistema
+                Agência Vnove · Mensagem automática do sistema
               </td>
             </tr>
           </table>

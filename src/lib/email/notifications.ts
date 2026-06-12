@@ -131,15 +131,55 @@ export async function notifyPropostaAceita(propostaId: string, clienteId: string
     html: buildEmailHtml({
       title: "Proposta aceita pelo cliente",
       greeting: "Olá, equipe!",
-      body: `O cliente <strong>${empresa}</strong> aceitou a proposta comercial. A proposta <strong>#${propostaId.slice(0, 8)}</strong> está pronta para os próximos passos financeiros e geração de contrato.`,
+      body: `O cliente <strong>${empresa}</strong> aceitou a proposta comercial. A proposta <strong>#${propostaId.slice(0, 8)}</strong> foi registrada e o contrato está sendo preparado para revisão financeira.`,
       ctaLabel: "Acessar propostas",
       ctaUrl: url,
     }),
     text: buildEmailText({
       title: "Proposta aceita pelo cliente",
       greeting: "Olá, equipe!",
-      body: `O cliente ${empresa} aceitou a proposta comercial. A proposta #${propostaId.slice(0, 8)} está pronta para os próximos passos financeiros e geração de contrato.`,
+      body: `O cliente ${empresa} aceitou a proposta comercial. A proposta #${propostaId.slice(0, 8)} foi registrada e o contrato está sendo preparado para revisão financeira.`,
       ctaLabel: "Acessar propostas",
+      ctaUrl: url,
+    }),
+  });
+}
+
+/** Avisa financeiro que o contrato foi gerado e aguarda revisão/edição */
+export async function notifyContratoDisponivelRevisaoFinanceiro(
+  contratoId: string,
+  clienteId: string
+) {
+  const [cliente, equipeEmails] = await Promise.all([
+    getClienteContato(clienteId),
+    getEquipeNotificacaoEmails(),
+  ]);
+
+  if (equipeEmails.length === 0) {
+    console.warn(
+      "[email] notifyContratoDisponivelRevisaoFinanceiro: nenhum destinatário interno"
+    );
+    return;
+  }
+
+  const empresa = cliente?.empresa ?? "Cliente";
+  const url = `${getAppUrl()}/contratos`;
+
+  await dispatchEmail("notifyContratoDisponivelRevisaoFinanceiro", {
+    to: equipeEmails,
+    subject: `Contrato para revisão — ${empresa}`,
+    html: buildEmailHtml({
+      title: "Contrato disponível para revisão",
+      greeting: "Olá, equipe Financeiro!",
+      body: `O contrato do cliente <strong>${empresa}</strong> foi gerado automaticamente após a aceitação da proposta e aguarda <strong>revisão e validação</strong> antes do envio ao cliente para assinatura. Contrato <strong>#${contratoId.slice(0, 8)}</strong>.`,
+      ctaLabel: "Revisar contratos",
+      ctaUrl: url,
+    }),
+    text: buildEmailText({
+      title: "Contrato disponível para revisão",
+      greeting: "Olá, equipe Financeiro!",
+      body: `O contrato do cliente ${empresa} foi gerado e aguarda revisão antes do envio para assinatura. Contrato #${contratoId.slice(0, 8)}.`,
+      ctaLabel: "Revisar contratos",
       ctaUrl: url,
     }),
   });
@@ -165,7 +205,7 @@ export async function notifyPropostaAceitaCliente(
     {
       title: "Proposta aceita com sucesso",
       greeting: `Olá, ${cliente.nome ?? "Cliente"}!`,
-      body: `Recebemos a aceitação da proposta comercial da <strong>${cliente.empresa ?? "sua empresa"}</strong>. Em instantes você receberá o contrato para assinatura digital.`,
+      body: `Recebemos a aceitação da proposta comercial da <strong>${cliente.empresa ?? "sua empresa"}</strong>. Nossa equipe financeira está preparando o contrato — você receberá um e-mail quando estiver liberado para assinatura digital.`,
       ctaLabel: "Ver confirmação",
       ctaUrl: url,
     }
@@ -228,7 +268,7 @@ export async function notifyContratoAssinado(
         {
           title: "Assinatura confirmada",
           greeting: `Olá, ${cliente.nome ?? "Cliente"}!`,
-          body: `Confirmamos a assinatura digital do contrato da <strong>${empresa}</strong>. Bem-vindo(a) à V9nove! Nossa equipe entrará em contato em breve para dar início ao projeto.`,
+          body: `Confirmamos a assinatura digital do contrato da <strong>${empresa}</strong>. Bem-vindo(a) à Agência Vnove! Nossa equipe entrará em contato em breve para dar início ao projeto.`,
           ctaLabel: "Ver contrato assinado",
           ctaUrl: url,
         }

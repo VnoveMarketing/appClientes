@@ -18,6 +18,13 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     if (error) return errorResponse(error.message, 500);
     if (!data) return errorResponse("Contrato não encontrado", 404);
 
+    if (data.status === "pendente_financeiro") {
+      return errorResponse(
+        "Contrato em revisão pela equipe financeira. Você será notificado quando estiver disponível para assinatura.",
+        403
+      );
+    }
+
     const { clientes, ...contrato } = data as Record<string, unknown> & {
       clientes: Record<string, unknown> | null;
     };

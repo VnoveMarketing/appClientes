@@ -75,7 +75,7 @@ export async function generateContractFromProposta(
       {
         proposta_id: proposta.id,
         cliente_id: proposta.cliente_id,
-        status: "pendente_assinatura",
+        status: "pendente_financeiro",
         valor_final_setup,
         valor_final_mensal,
         detalhes_financeiros,

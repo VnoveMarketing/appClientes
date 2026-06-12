@@ -63,7 +63,7 @@ export function buildContractContent(
       ? `Sede: ${cliente.cidade}/${cliente.estado}\n`
       : "") +
     (cliente.nome ? `Representante Legal: ${cliente.nome}\n` : "") +
-    `CONTRATADA: AGÊNCIA MARKETING V9NOVE LTDA\n\n` +
+    `CONTRATADA: AGÊNCIA MARKETING VNOVE LTDA\n\n` +
     `CLÁUSULA PRIMEIRA - DO OBJETO\n` +
     `O presente contrato tem por objeto a prestação de serviços de marketing digital conforme o seguinte escopo detalhado:\n` +
     `${escopoTexto}\n\n` +

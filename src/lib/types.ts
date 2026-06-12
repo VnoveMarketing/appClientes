@@ -1,3 +1,4 @@
+export type { CaseCategoria, CasePortfolio } from "./cases";
 export type { Cliente, Proposta, Contrato } from "./db-mock";
 export type { EscopoItemRef, EscopoItemCatalog } from "./escopo";
 export type {
@@ -7,3 +8,10 @@ export type {
   ContratoModelo,
 } from "./tipos-servico";
 export type { ContratoAssinaturaEvidencias } from "./signature-audit";
+export type {
+  TipoUsuario,
+  Permissao,
+  TipoUsuarioPermissao,
+  UsuarioProfile,
+  NivelPermissao,
+} from "./usuarios";

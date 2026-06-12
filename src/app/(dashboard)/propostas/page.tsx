@@ -44,6 +44,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ClientDate } from "@/components/client-date";
 import {
   MoreHorizontal,
   Plus,
@@ -383,19 +384,33 @@ export default function PropostasPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wider py-0.5 px-2.5 rounded-full border ${
-                            proposta.status === "aceita"
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                              : proposta.status === "contrato_gerado"
-                              ? "bg-[#09A3E9]/10 text-[#09A3E9] border-[#09A3E9]/20"
-                              : proposta.status === "em_analise"
-                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                              : "bg-zinc-800 text-zinc-500 border-zinc-700/50"
-                          }`}
-                        >
-                          {proposta.status === "contrato_gerado" ? "contrato" : proposta.status}
-                        </span>
+                        <div className="flex flex-col gap-1.5">
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider py-0.5 px-2.5 rounded-full border w-fit ${
+                              proposta.status === "aceita"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : proposta.status === "contrato_gerado"
+                                ? "bg-[#09A3E9]/10 text-[#09A3E9] border-[#09A3E9]/20"
+                                : proposta.status === "em_analise"
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                : "bg-zinc-800 text-zinc-500 border-zinc-700/50"
+                            }`}
+                          >
+                            {proposta.status === "contrato_gerado" ? "contrato" : proposta.status}
+                          </span>
+                          {proposta.visualizada_em ? (
+                            <span className="text-[11px] font-medium text-sky-400/90 leading-tight">
+                              Proposta visualizada ·{" "}
+                              <ClientDate iso={proposta.visualizada_em} className="text-sky-400/90" />
+                            </span>
+                          ) : null}
+                          {proposta.aceita_em ? (
+                            <span className="text-[11px] font-medium text-emerald-400/90 leading-tight">
+                              Proposta aceita ·{" "}
+                              <ClientDate iso={proposta.aceita_em} className="text-emerald-400/90" />
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell className="text-zinc-400 text-xs">
                         {new Date(proposta.created_at).toLocaleDateString("pt-BR")}
@@ -474,7 +489,7 @@ export default function PropostasPage() {
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="cliente" className="text-zinc-300 text-xs">
+                  <Label htmlFor="cliente">
                     Nome do cliente *
                   </Label>
                   <Select value={clienteId} onValueChange={(v) => v && setClienteId(v)} required>
@@ -492,7 +507,7 @@ export default function PropostasPage() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="tipoServico" className="text-zinc-300 text-xs">
+                  <Label htmlFor="tipoServico">
                     Tipo de serviço *
                   </Label>
                   <Select
@@ -526,7 +541,7 @@ export default function PropostasPage() {
                                   const valor = computeCampoCalculado(campo, camposValores);
                                   return (
                                     <div key={campo.chave} className="flex flex-col gap-1.5">
-                                      <Label className="text-zinc-300 text-xs">{campo.label}</Label>
+                                      <Label>{campo.label}</Label>
                                       <div className="h-9 flex items-center px-3 rounded-lg border border-[#09A3E9]/30 bg-[#09A3E9]/5 text-[#09A3E9] font-semibold text-sm">
                                         {formatCalculatedCurrency(valor)}
                                       </div>
@@ -542,7 +557,7 @@ export default function PropostasPage() {
 
                                 return (
                                   <div key={campo.chave} className="flex flex-col gap-1.5">
-                                    <Label className="text-zinc-300 text-xs">
+                                    <Label>
                                       {campo.label}
                                       {campo.obrigatorio ? " *" : ""}
                                     </Label>
@@ -557,7 +572,7 @@ export default function PropostasPage() {
                                         })
                                       }
                                       placeholder={campo.placeholder}
-                                      className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                      className="bg-zinc-900 border-zinc-800 text-zinc-100"
                                     />
                                   </div>
                                 );
@@ -569,34 +584,34 @@ export default function PropostasPage() {
                             <h3 className="text-sm font-semibold text-white mb-3">Condições Especiais</h3>
                             <div className="grid grid-cols-3 gap-4">
                               <div className="flex flex-col gap-1.5">
-                                <Label className="text-zinc-300 text-xs">Desconto no setup (%)</Label>
+                                <Label>Desconto no setup (%)</Label>
                                 <Input
                                   type="number"
                                   min="0"
                                   max="100"
                                   value={descontoSetup}
                                   onChange={(e) => setDescontoSetup(e.target.value)}
-                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                  className="bg-zinc-900 border-zinc-800 text-zinc-100"
                                 />
                               </div>
                               <div className="flex flex-col gap-1.5">
-                                <Label className="text-zinc-300 text-xs">Desconto mensalidade (%)</Label>
+                                <Label>Desconto mensalidade (%)</Label>
                                 <Input
                                   type="number"
                                   min="0"
                                   max="100"
                                   value={descontoMensalidade}
                                   onChange={(e) => setDescontoMensalidade(e.target.value)}
-                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                  className="bg-zinc-900 border-zinc-800 text-zinc-100"
                                 />
                               </div>
                               <div className="flex flex-col gap-1.5">
-                                <Label className="text-zinc-300 text-xs">Descrição da condição</Label>
+                                <Label>Descrição da condição</Label>
                                 <Input
                                   value={condicaoDescricao}
                                   onChange={(e) => setCondicaoDescricao(e.target.value)}
                                   placeholder="Ex: 50% nos 3 primeiros meses"
-                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                  className="bg-zinc-900 border-zinc-800 text-zinc-100"
                                 />
                               </div>
                             </div>
@@ -612,22 +627,22 @@ export default function PropostasPage() {
         
                             <div className="grid gap-3 mb-4 p-3 border border-zinc-800 rounded-lg bg-zinc-950">
                               <div className="flex flex-col gap-1.5">
-                                <Label className="text-zinc-300 text-xs">Nome do item *</Label>
+                                <Label>Nome do item *</Label>
                                 <Input
                                   placeholder="Ex: CRM, Integrações..."
                                   value={novoItemNome}
                                   onChange={(e) => setNovoItemNome(e.target.value)}
-                                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                                  className="bg-zinc-900 border-zinc-800 text-zinc-100"
                                 />
                               </div>
                               <div className="flex flex-col gap-1.5">
-                                <Label className="text-zinc-300 text-xs">Descrição do entregável</Label>
+                                <Label>Descrição do entregável</Label>
                                 <textarea
                                   placeholder="Descreva o que está incluso..."
                                   value={novaItemDescricao}
                                   onChange={(e) => setNovaItemDescricao(e.target.value)}
                                   rows={2}
-                                  className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
+                                  className="bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y font-[family-name:var(--font-inter)]"
                                 />
                               </div>
                               <Button
@@ -680,7 +695,7 @@ export default function PropostasPage() {
                )}
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="escopoDescricaoAdicional" className="text-zinc-300 text-xs">
+                <Label htmlFor="escopoDescricaoAdicional">
                   Descrição adicional do escopo
                 </Label>
                 <textarea
@@ -689,7 +704,7 @@ export default function PropostasPage() {
                   onChange={(e) => setEscopoDescricaoAdicional(e.target.value)}
                   placeholder="Detalhes gerais do escopo..."
                   rows={2}
-                  className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-white text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y"
+                  className="bg-zinc-900 border border-zinc-800 rounded-md p-2.5 text-zinc-100 text-sm outline-none focus:border-[#09A3E9]/50 w-full resize-y font-[family-name:var(--font-inter)]"
                 />
               </div>
 

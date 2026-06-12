@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, use, useEffect } from "react";
+import React, { useState, useRef, use, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileSignature, ShieldCheck, Eraser, Check, AlertTriangle } from "lucide-react";
+import { ContratoEvidenciasPanel } from "@/components/contrato-evidencias-panel";
+import { AgencyLogo } from "@/components/agency-brand";
+import { FileSignature, ShieldCheck, Eraser, Check, AlertTriangle, Eye } from "lucide-react";
 import { useHasMounted, ClientDate } from "@/components/client-date";
 
 function isCanvasBlank(canvas: HTMLCanvasElement): boolean {
@@ -44,8 +47,10 @@ async function captureGeolocation(): Promise<{
   });
 }
 
-export default function ContratoSignaturePage({ params }: { params: Promise<{ id: string }> }) {
+function ContratoPageContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
+  const isAdminView = searchParams.get("painel") === "admin";
   const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const hasMounted = useHasMounted();
@@ -60,13 +65,24 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
   const [geoNotice, setGeoNotice] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["public-contrato", id],
-    queryFn: () => dbService.getPublicContratoWithCliente(id),
+    queryKey: isAdminView ? ["admin-contrato", id] : ["public-contrato", id],
+    queryFn: () =>
+      isAdminView
+        ? dbService.getAdminContratoWithCliente(id)
+        : dbService.getPublicContratoWithCliente(id),
     enabled: hasMounted,
+    retry: isAdminView ? false : true,
   });
 
   const contrato = data?.contrato;
   const client = data?.cliente;
+
+  const { data: evidencias } = useQuery({
+    queryKey: ["contrato-evidencias", id],
+    queryFn: () => dbService.getContratoEvidencias(id),
+    enabled: hasMounted && isAdminView && contrato?.status === "assinado",
+    retry: false,
+  });
 
   useEffect(() => {
     if (!client) return;
@@ -74,6 +90,11 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
     setSignatoryEmail(client.email || "");
     setSignatoryPhone(client.telefone || "");
   }, [client]);
+
+  useEffect(() => {
+    if (isAdminView || !contrato || contrato.status !== "pendente_assinatura") return;
+    dbService.trackContratoAssinaturaIniciada(id).catch(() => {});
+  }, [id, contrato?.id, contrato?.status, isAdminView]);
 
   const signMutation = useMutation({
     mutationFn: async (evidencias: Parameters<typeof dbService.signPublicContrato>[1]) => {
@@ -142,18 +163,29 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
   }
 
   if (error || !contrato || !client) {
+    const isForbidden =
+      !isAdminView && String((error as Error)?.message ?? "").includes("revisão");
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[#0B0B0B] text-zinc-400">
         <div className="flex flex-col items-center gap-2 text-center max-w-md px-6">
           <AlertTriangle className="size-12 text-rose-500" />
-          <span className="text-lg font-semibold text-white">Contrato não encontrado</span>
+          <span className="text-lg font-semibold text-white">
+            {isForbidden ? "Contrato em preparação" : isAdminView ? "Acesso negado" : "Contrato não encontrado"}
+          </span>
           <span className="text-sm text-zinc-500">
-            O link de assinatura é inválido ou o contrato ainda não foi elaborado.
+            {isForbidden
+              ? "Nossa equipe financeira está finalizando o contrato. Você receberá um e-mail quando estiver disponível para assinatura."
+              : isAdminView
+              ? "Faça login no painel administrativo para visualizar este contrato."
+              : "O link de assinatura é inválido ou o contrato ainda não foi liberado."}
           </span>
         </div>
       </div>
     );
   }
+
+  const showClientSignaturePanel =
+    !isAdminView && contrato.status === "pendente_assinatura";
 
   const handleSubmitSignature = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,12 +243,21 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
       <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-[#09A3E9]/5 rounded-full blur-3xl -z-10 pointer-events-none" />
 
       <div className="w-full max-w-3xl flex flex-col gap-6">
+        <div className="flex justify-center">
+          <AgencyLogo height={36} />
+        </div>
         <Card className="bg-[#161616] border border-zinc-800/80 shadow-2xl overflow-hidden">
           <div className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between bg-zinc-950/40">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="size-5 text-[#09A3E9]" />
+              {isAdminView ? (
+                <Eye className="size-5 text-[#09A3E9]" />
+              ) : (
+                <ShieldCheck className="size-5 text-[#09A3E9]" />
+              )}
               <span className="text-xs text-zinc-400 font-mono tracking-wider">
-                ASSINATURA DIGITAL · TRILHA DE AUDITORIA
+                {isAdminView
+                  ? "VISUALIZAÇÃO ADMINISTRATIVA · PAINEL VNOVE"
+                  : "ASSINATURA DIGITAL · TRILHA DE AUDITORIA"}
               </span>
             </div>
             <Badge
@@ -224,10 +265,16 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
               className={`text-[9px] font-bold tracking-widest uppercase py-0.5 px-2.5 rounded-full border ${
                 contrato.status === "assinado"
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                  : contrato.status === "pendente_financeiro"
+                  ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
                   : "bg-amber-500/10 text-amber-400 border-amber-500/20"
               }`}
             >
-              {contrato.status === "assinado" ? "Assinado" : "Aguardando Assinatura"}
+              {contrato.status === "assinado"
+                ? "Assinado"
+                : contrato.status === "pendente_financeiro"
+                ? "Aguardando Revisão"
+                : "Aguardando Assinatura"}
             </Badge>
           </div>
 
@@ -239,7 +286,7 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
               <h1 className="text-2xl font-black text-white mt-1">CONTRATO DE MARKETING DIGITAL</h1>
               <p className="text-xs text-zinc-400 mt-1">
                 Representando: <strong className="text-white">{client.empresa}</strong> e a Agência
-                V9nove.
+                Vnove.
               </p>
             </div>
 
@@ -247,7 +294,7 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
               {contrato.conteudo_contrato}
             </div>
 
-            {contrato.status !== "assinado" ? (
+            {showClientSignaturePanel ? (
               <form
                 onSubmit={handleSubmitSignature}
                 className="flex flex-col gap-5 border-t border-zinc-800/80 pt-6 mt-2"
@@ -260,7 +307,7 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="signatoryName" className="text-zinc-300 text-xs">
+                    <Label htmlFor="signatoryName">
                       Nome completo do signatário *
                     </Label>
                     <Input
@@ -273,7 +320,7 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="signatoryCpf" className="text-zinc-300 text-xs">
+                    <Label htmlFor="signatoryCpf">
                       CPF *
                     </Label>
                     <Input
@@ -286,7 +333,7 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="signatoryEmail" className="text-zinc-300 text-xs">
+                    <Label htmlFor="signatoryEmail">
                       E-mail *
                     </Label>
                     <Input
@@ -300,7 +347,7 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="signatoryPhone" className="text-zinc-300 text-xs">
+                    <Label htmlFor="signatoryPhone">
                       Telefone celular
                     </Label>
                     <Input
@@ -315,7 +362,7 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
 
                 <div className="flex flex-col gap-2.5">
                   <div className="flex items-center justify-between">
-                    <Label className="text-zinc-300 text-xs">Assinatura digital *</Label>
+                    <Label>Assinatura digital *</Label>
                     <div className="flex gap-1.5">
                       <Button
                         type="button"
@@ -404,32 +451,67 @@ export default function ContratoSignaturePage({ params }: { params: Promise<{ id
                     : "Assinar contrato digitalmente"}
                 </Button>
               </form>
-            ) : (
-              <div className="mt-4 border-t border-zinc-800/80 pt-6 flex flex-col items-center justify-center text-center gap-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-8">
-                <div className="size-12 rounded-full bg-emerald-500/10 border-2 border-emerald-500/25 flex items-center justify-center text-emerald-400">
-                  <Check className="size-6 stroke-[3]" />
+            ) : contrato.status === "assinado" ? (
+              <div className="mt-4 border-t border-zinc-800/80 pt-6 flex flex-col gap-6">
+                <div className="flex flex-col items-center justify-center text-center gap-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-8">
+                  <div className="size-12 rounded-full bg-emerald-500/10 border-2 border-emerald-500/25 flex items-center justify-center text-emerald-400">
+                    <Check className="size-6 stroke-[3]" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-white text-lg">Contrato assinado digitalmente</h3>
+                    <p className="text-zinc-400 text-xs mt-1">
+                      {isAdminView
+                        ? "Dados da assinatura e trilha de auditoria abaixo."
+                        : "Trilha de auditoria registrada com hash SHA-256 e carimbo de tempo (Brasília)."}
+                    </p>
+                  </div>
+                  {contrato.assinado_em && (
+                    <div className="text-zinc-500 text-[10px] font-mono mt-2">
+                      Assinado em:{" "}
+                      <ClientDate
+                        iso={contrato.assinado_em}
+                        timeZone="America/Sao_Paulo"
+                        suffix="(Horário de Brasília)"
+                      />
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-white text-lg">Contrato assinado digitalmente</h3>
-                  <p className="text-zinc-400 text-xs mt-1">
-                    Trilha de auditoria registrada com hash SHA-256 e carimbo de tempo (Brasília).
-                  </p>
-                </div>
-                {contrato.assinado_em && (
-                  <div className="text-zinc-500 text-[10px] font-mono mt-2">
-                    Assinado em:{" "}
-                    <ClientDate
-                      iso={contrato.assinado_em}
-                      timeZone="America/Sao_Paulo"
-                      suffix="(Horário de Brasília)"
-                    />
+
+                {isAdminView && evidencias && (
+                  <div className="flex flex-col gap-3">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <ShieldCheck className="size-4 text-emerald-400" />
+                      Dados da assinatura
+                    </h3>
+                    <ContratoEvidenciasPanel evidencias={evidencias} />
                   </div>
                 )}
               </div>
-            )}
+            ) : isAdminView && contrato.status === "pendente_financeiro" ? (
+              <div className="mt-4 border-t border-zinc-800/80 pt-6 rounded-xl border border-violet-500/20 bg-violet-500/5 p-6 text-center">
+                <p className="text-sm text-violet-300">
+                  Este contrato aguarda revisão e validação pelo financeiro antes de ser liberado ao
+                  cliente. Use o painel <strong>Contratos → Revisar e editar</strong>.
+                </p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function ContratoSignaturePage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-screen items-center justify-center bg-[#0B0B0B] text-zinc-400">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#09A3E9]" />
+        </div>
+      }
+    >
+      <ContratoPageContent params={params} />
+    </Suspense>
   );
 }
