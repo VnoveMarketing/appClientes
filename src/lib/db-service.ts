@@ -11,6 +11,7 @@ export const dbService = {
     apiClient.updateCliente(id, updates),
   deleteCliente: (id: string) => apiClient.deleteCliente(id),
   uploadClienteLogo: (id: string, file: File) => apiClient.uploadClienteLogo(id, file),
+  uploadClienteHeroImage: (id: string, file: File) => apiClient.uploadClienteHeroImage(id, file),
 
   getCaseCategorias: () => apiClient.getCaseCategorias(),
   addCaseCategoria: (payload: { nome: string }) => apiClient.addCaseCategoria(payload),
@@ -59,6 +60,10 @@ export const dbService = {
     id: string,
     clientUpdates: Parameters<typeof apiClient.acceptPublicProposta>[1]
   ) => apiClient.acceptPublicProposta(id, clientUpdates),
+  savePublicPropostaClienteDados: (
+    id: string,
+    dados: Parameters<typeof apiClient.savePublicPropostaClienteDados>[1]
+  ) => apiClient.savePublicPropostaClienteDados(id, dados),
   getPublicContratoById: (id: string) => apiClient.getPublicContrato(id),
   getPublicContratoWithCliente: (id: string) => apiClient.getPublicContratoById(id),
   trackContratoAssinaturaIniciada: (id: string) => apiClient.trackContratoAssinaturaIniciada(id),
@@ -71,7 +76,7 @@ export const dbService = {
   getEscopoItens: (): Promise<EscopoItemCatalog[]> => apiClient.getEscopoItens(),
   addEscopoItem: (item: { nome: string; descricao: string }): Promise<EscopoItemCatalog> =>
     apiClient.addEscopoItem(item),
-  extractCartaoSocial: (file: string) => apiClient.extractCartaoSocial(file),
+  lookupCnpj: (cnpj: string) => apiClient.lookupCnpj(cnpj),
 
   getTiposServico: (): Promise<TipoServico[]> => apiClient.getTiposServico(),
   addTipoServico: (payload: Parameters<typeof apiClient.addTipoServico>[0]) =>

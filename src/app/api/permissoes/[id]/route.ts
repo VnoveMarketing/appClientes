@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { getAdminSupabase } from "@/lib/api/admin-db";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -15,7 +16,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (body.descricao !== undefined) updates.descricao = String(body.descricao).trim();
   if (body.modulo !== undefined) updates.modulo = String(body.modulo).trim().toLowerCase();
 
-  const { data, error } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data, error } = await supabase
     .from("permissoes")
     .update(updates)
     .eq("id", id)
@@ -31,7 +33,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
-  const { error } = await auth.supabase.from("permissoes").delete().eq("id", id);
+  const supabase = getAdminSupabase();
+  const { error } = await supabase.from("permissoes").delete().eq("id", id);
   if (error) return errorResponse(error.message, 500);
   return jsonResponse({ success: true });
 }

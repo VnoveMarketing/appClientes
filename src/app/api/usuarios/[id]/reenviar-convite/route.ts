@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
 import { getAdminSupabase } from "@/lib/api/admin-db";
-import { getAppUrl } from "@/lib/email/resend";
+import { provisionUsuarioConvite } from "@/lib/convite";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -10,9 +10,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
-  const { data: profile, error: profileError } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*, tipos_usuario(slug)")
+    .select("*, tipos_usuario(slug, nome)")
     .eq("id", id)
     .maybeSingle();
 
@@ -23,26 +24,34 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return errorResponse("Este usuário já aceitou o convite e está ativo", 400);
   }
 
-  const tipo = profile.tipos_usuario as { slug: string } | null;
-  const admin = getAdminSupabase();
-  const now = new Date().toISOString();
+  const tipo = profile.tipos_usuario as { slug: string; nome: string } | null;
 
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(profile.email, {
-    redirectTo: `${getAppUrl()}/auth/callback?next=/clientes`,
-    data: {
+  if (!profile.tipo_usuario_id) {
+    return errorResponse("Usuário sem tipo configurado", 400);
+  }
+
+  try {
+    const result = await provisionUsuarioConvite({
+      email: profile.email,
       full_name: profile.full_name ?? profile.email,
-      role: profile.role ?? tipo?.slug ?? "consultor",
       tipo_usuario_id: profile.tipo_usuario_id,
-      nivel_permissao: profile.nivel_permissao,
-    },
-  });
+      tipo_slug: profile.role ?? tipo?.slug ?? "consultor",
+      tipo_nome: tipo?.nome ?? "Usuário",
+    });
 
-  if (inviteError) return errorResponse(inviteError.message, 400);
+    if (!result.emailSent) {
+      return errorResponse(
+        `Não foi possível reenviar o e-mail: ${result.emailError ?? "erro desconhecido"}`,
+        500
+      );
+    }
 
-  await admin
-    .from("profiles")
-    .update({ convite_enviado_em: now, convite_status: "pendente" })
-    .eq("id", id);
-
-  return jsonResponse({ success: true, message: "Convite reenviado por e-mail." });
+    return jsonResponse({
+      success: true,
+      message: "Convite reenviado por e-mail com link para aceitar e criar senha.",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao reenviar convite";
+    return errorResponse(message, 400);
+  }
 }

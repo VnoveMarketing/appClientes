@@ -24,5 +24,6 @@ export async function uploadPropostaAsset(file: File, storagePath: string): Prom
   if (error) throw new Error(error.message);
 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
-  return data.publicUrl;
+  const separator = data.publicUrl.includes("?") ? "&" : "?";
+  return `${data.publicUrl}${separator}v=${Date.now()}`;
 }

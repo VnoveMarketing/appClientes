@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { getAdminSupabase } from "@/lib/api/admin-db";
 
 export async function GET() {
   const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
-  const { data, error } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data, error } = await supabase
     .from("tipos_usuario")
     .select("*, tipo_usuario_permissoes(*, permissoes(*))")
     .order("ordem");
@@ -49,7 +51,8 @@ export async function POST(request: NextRequest) {
     return errorResponse("Nome e slug são obrigatórios");
   }
 
-  const { data: tipo, error } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data: tipo, error } = await supabase
     .from("tipos_usuario")
     .insert([
       {
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
   if (error) return errorResponse(error.message, 500);
 
   if (permissoes?.length) {
-    const { error: permError } = await auth.supabase.from("tipo_usuario_permissoes").insert(
+    const { error: permError } = await supabase.from("tipo_usuario_permissoes").insert(
       permissoes.map((p) => ({
         tipo_usuario_id: tipo.id,
         permissao_id: p.permissao_id,

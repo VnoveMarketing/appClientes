@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { getAdminSupabase } from "@/lib/api/admin-db";
 
 export async function GET() {
   const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
-  const { data, error } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data, error } = await supabase
     .from("permissoes")
     .select("*")
     .order("modulo")
@@ -26,7 +28,8 @@ export async function POST(request: NextRequest) {
     return errorResponse("Chave, nome e módulo são obrigatórios");
   }
 
-  const { data, error } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data, error } = await supabase
     .from("permissoes")
     .insert([
       {

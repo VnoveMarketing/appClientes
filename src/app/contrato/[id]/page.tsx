@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ContratoEvidenciasPanel } from "@/components/contrato-evidencias-panel";
+import { normalizeContractText } from "@/lib/contract-builder";
 import { AgencyLogo } from "@/components/agency-brand";
+import { ContratoEvidenciasPanel } from "@/components/contrato-evidencias-panel";
 import { FileSignature, ShieldCheck, Eraser, Check, AlertTriangle, Eye } from "lucide-react";
 import { useHasMounted, ClientDate } from "@/components/client-date";
 
@@ -291,7 +292,7 @@ function ContratoPageContent({ params }: { params: Promise<{ id: string }> }) {
             </div>
 
             <div className="bg-zinc-950 border border-zinc-900 rounded-lg p-6 max-h-[300px] overflow-y-auto text-zinc-300 font-sans text-xs whitespace-pre-wrap leading-relaxed shadow-inner">
-              {contrato.conteudo_contrato}
+              {normalizeContractText(contrato.conteudo_contrato)}
             </div>
 
             {showClientSignaturePanel ? (

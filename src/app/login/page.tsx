@@ -1,37 +1,62 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Lock, Mail, ArrowRight } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { AgencyLogo } from "@/components/agency-brand";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("convite") === "aceito") {
+      setSuccessMsg("Conta ativada com sucesso! Faça login com o e-mail e a senha que você criou.");
+    } else if (searchParams.get("error") === "conta_nao_ativada") {
+      setErrorMsg(
+        "Sua conta ainda não está ativa. Aceite o convite recebido por e-mail e crie sua senha."
+      );
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg("");
+    setSuccessMsg("");
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    setIsLoading(false);
-
     if (error) {
+      setIsLoading(false);
       setErrorMsg("Credenciais inválidas. Verifique e-mail e senha.");
       return;
     }
 
+    const meRes = await fetch("/api/auth/me");
+    if (!meRes.ok) {
+      await supabase.auth.signOut();
+      setIsLoading(false);
+      const data = await meRes.json().catch(() => ({}));
+      setErrorMsg(
+        data.error ??
+          "Sua conta ainda não está ativa. Aceite o convite recebido por e-mail e crie sua senha."
+      );
+      return;
+    }
+
+    setIsLoading(false);
     router.push("/clientes");
     router.refresh();
   };
@@ -53,6 +78,11 @@ export default function LoginPage() {
 
         <CardContent className="p-0">
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            {successMsg && (
+              <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
+                {successMsg}
+              </p>
+            )}
             {errorMsg && (
               <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md px-3 py-2">
                 {errorMsg}
@@ -101,5 +131,19 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#0B0B0B] text-zinc-100 flex items-center justify-center">
+          <p className="text-sm text-zinc-400">Carregando...</p>
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

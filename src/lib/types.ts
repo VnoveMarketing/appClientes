@@ -15,3 +15,4 @@ export type {
   UsuarioProfile,
   NivelPermissao,
 } from "./usuarios";
+export { NIVEL_PERMISSAO_OPTIONS, NIVEL_PERMISSAO_LABELS } from "./usuarios";

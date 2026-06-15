@@ -2,6 +2,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatEscopoForContract } from "@/lib/escopo";
 import { renderContractTemplate } from "@/lib/contract-template";
 
+/** Converte sequências literais \\n (comum em templates salvos) em quebras de linha reais. */
+export function normalizeContractText(text: string | null | undefined): string {
+  if (!text) return "";
+
+  return text
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+}
+
 export type PropostaForContract = {
   setup: number;
   mensalidade: number;
@@ -38,13 +50,15 @@ export function buildContractContent(
   options?: {
     tipoServicoNome?: string | null;
     campos?: { chave: string; label: string; tipo_campo: string }[];
+    valorSetup?: number;
+    valorMensal?: number;
   }
 ) {
-  const discountedSetup = calcDiscountedValue(proposta.setup, proposta.desconto_setup);
-  const discountedMensal = calcDiscountedValue(
-    proposta.mensalidade,
-    proposta.desconto_mensalidade
-  );
+  const discountedSetup =
+    options?.valorSetup ?? calcDiscountedValue(proposta.setup, proposta.desconto_setup);
+  const discountedMensal =
+    options?.valorMensal ??
+    calcDiscountedValue(proposta.mensalidade, proposta.desconto_mensalidade);
 
   const clientName = cliente.empresa?.trim() || "CONTRATANTE";
   const escopoTexto = formatEscopoForContract(
@@ -55,7 +69,7 @@ export function buildContractContent(
   const duracaoTexto =
     proposta.duracao === 0 ? "prazo indeterminado" : `${proposta.duracao} meses`;
 
-  return (
+  return normalizeContractText(
     `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MARKETING DIGITAL\n\n` +
     `CONTRATANTE: ${clientName.toUpperCase()}\n` +
     (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : "") +
@@ -81,6 +95,54 @@ export function buildContractContent(
   );
 }
 
+export function buildContractContentResolved(
+  proposta: PropostaForContract,
+  cliente: ClienteForContract,
+  options?: {
+    template?: string | null;
+    tipoServicoNome?: string | null;
+    campos?: { chave: string; label: string; tipo_campo: string }[];
+    valorSetup?: number;
+    valorMensal?: number;
+  }
+) {
+  const setup =
+    options?.valorSetup ?? calcDiscountedValue(proposta.setup, proposta.desconto_setup);
+  const mensal =
+    options?.valorMensal ??
+    calcDiscountedValue(proposta.mensalidade, proposta.desconto_mensalidade);
+
+  if (options?.template?.trim()) {
+    return normalizeContractText(
+      renderContractTemplate(options.template, {
+        empresa: cliente.empresa,
+        cnpj: cliente.cnpj,
+        cidade: cliente.cidade,
+        estado: cliente.estado,
+        representante_legal: cliente.nome,
+        escopo: proposta.escopo,
+        escopo_descricao_adicional: proposta.escopo_descricao_adicional,
+        campos_valores: proposta.campos_valores ?? {},
+        campos: options.campos ?? [],
+        setup,
+        mensalidade: mensal,
+        duracao: proposta.duracao,
+        desconto_setup: proposta.desconto_setup,
+        desconto_mensalidade: proposta.desconto_mensalidade,
+        condicao_descricao: proposta.condicao_descricao,
+        tipo_servico: options.tipoServicoNome,
+      })
+    );
+  }
+
+  return buildContractContent(proposta, cliente, {
+    tipoServicoNome: options?.tipoServicoNome,
+    campos: options?.campos,
+    valorSetup: setup,
+    valorMensal: mensal,
+  });
+}
+
 export async function buildContractContentFromDb(
   supabase: SupabaseClient,
   proposta: PropostaForContract,
@@ -88,6 +150,8 @@ export async function buildContractContentFromDb(
   options?: {
     tipoServicoNome?: string | null;
     campos?: { chave: string; label: string; tipo_campo: string }[];
+    valorSetup?: number;
+    valorMensal?: number;
   }
 ) {
   const { data: modelo } = await supabase
@@ -96,34 +160,13 @@ export async function buildContractContentFromDb(
     .eq("ativo", true)
     .maybeSingle();
 
-  if (modelo?.conteudo_template?.trim()) {
-    const discountedSetup = calcDiscountedValue(proposta.setup, proposta.desconto_setup);
-    const discountedMensal = calcDiscountedValue(
-      proposta.mensalidade,
-      proposta.desconto_mensalidade
-    );
-
-    return renderContractTemplate(modelo.conteudo_template, {
-      empresa: cliente.empresa,
-      cnpj: cliente.cnpj,
-      cidade: cliente.cidade,
-      estado: cliente.estado,
-      representante_legal: cliente.nome,
-      escopo: proposta.escopo,
-      escopo_descricao_adicional: proposta.escopo_descricao_adicional,
-      campos_valores: proposta.campos_valores ?? {},
-      campos: options?.campos ?? [],
-      setup: discountedSetup,
-      mensalidade: discountedMensal,
-      duracao: proposta.duracao,
-      desconto_setup: proposta.desconto_setup,
-      desconto_mensalidade: proposta.desconto_mensalidade,
-      condicao_descricao: proposta.condicao_descricao,
-      tipo_servico: options?.tipoServicoNome,
-    });
-  }
-
-  return buildContractContent(proposta, cliente, options);
+  return buildContractContentResolved(proposta, cliente, {
+    template: modelo?.conteudo_template,
+    tipoServicoNome: options?.tipoServicoNome,
+    campos: options?.campos,
+    valorSetup: options?.valorSetup,
+    valorMensal: options?.valorMensal,
+  });
 }
 
 export function getContractFinancialValues(proposta: PropostaForContract) {

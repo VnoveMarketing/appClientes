@@ -82,6 +82,22 @@ export const apiClient = {
     });
   },
 
+  uploadClienteHeroImage: (id: string, file: File): Promise<Cliente> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetch(`/api/clientes/${id}/hero-image`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `Erro ${res.status}`);
+      }
+      return res.json();
+    });
+  },
+
   // CASE CATEGORIAS
   getCaseCategorias: (): Promise<CaseCategoria[]> => apiFetch("/api/case-categorias"),
 
@@ -280,6 +296,24 @@ export const apiClient = {
       body: JSON.stringify({ clientUpdates }),
     }),
 
+  savePublicPropostaClienteDados: (
+    id: string,
+    dados: {
+      empresa?: string;
+      email?: string;
+      telefone?: string;
+      cnpj?: string;
+      ramo_atividade?: string;
+      cidade?: string;
+      estado?: string;
+      nome?: string;
+    }
+  ) =>
+    apiFetch(`/api/public/propostas/${id}/cliente-dados`, {
+      method: "PATCH",
+      body: JSON.stringify(dados),
+    }),
+
   getPublicContratoById: async (id: string): Promise<PublicContratoResponse | null> => {
     try {
       return await apiFetch<PublicContratoResponse>(`/api/public/contratos/${id}`);
@@ -335,8 +369,8 @@ export const apiClient = {
       body: JSON.stringify(item),
     }),
 
-  // AI
-  extractCartaoSocial: (file: string) =>
+  // CNPJ
+  lookupCnpj: (cnpj: string) =>
     apiFetch<{
       empresa?: string;
       cnpj?: string;
@@ -346,10 +380,8 @@ export const apiClient = {
       estado?: string;
       ramo_atividade?: string;
       nome?: string;
-    }>("/api/public/extract-cartao-social", {
-      method: "POST",
-      body: JSON.stringify({ file }),
-    }),
+      situacao_cadastral?: string;
+    }>(`/api/public/cnpj/${encodeURIComponent(cnpj.replace(/\D/g, ""))}`),
 
   // TIPOS DE SERVIÇO
   getTiposServico: (): Promise<TipoServico[]> => apiFetch("/api/tipos-servico"),
@@ -449,7 +481,6 @@ export const apiClient = {
     email: string;
     full_name: string;
     tipo_usuario_id: string;
-    nivel_permissao: NivelPermissao;
   }): Promise<UsuarioProfile & { message?: string }> =>
     apiFetch("/api/usuarios", { method: "POST", body: JSON.stringify(payload) }),
 

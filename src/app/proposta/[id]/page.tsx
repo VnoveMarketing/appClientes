@@ -97,6 +97,8 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
   const duracaoLabel =
     proposta.duracao === 0 ? "Prazo indeterminado" : `${proposta.duracao} meses`;
 
+  const hasHeroImage = Boolean(client?.hero_image_url);
+
   return (
     <div className="prop-branded" style={brandedStyle}>
       <nav className="prop-nav">
@@ -107,7 +109,20 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
       </nav>
 
       {/* Hero */}
-      <section className="prop-hero" id="top">
+      <section
+        className={`prop-hero${hasHeroImage ? " prop-hero-has-bg" : ""}`}
+        id="top"
+      >
+        {hasHeroImage ? (
+          <>
+            <div
+              className="prop-hero-bg"
+              style={{ backgroundImage: `url(${client!.hero_image_url})` }}
+              aria-hidden
+            />
+            <div className="prop-hero-gradient" aria-hidden />
+          </>
+        ) : null}
         <div className="prop-hero-inner prop-hero-split">
           <div className="prop-hero-content">
             <div className="prop-kicker">Proposta Comercial · Agência Vnove</div>

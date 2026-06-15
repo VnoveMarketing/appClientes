@@ -5,6 +5,7 @@ import {
   jsonResponse,
   errorResponse,
 } from "@/lib/api/auth";
+import { normalizeContractText } from "@/lib/contract-builder";
 
 export async function GET() {
   const auth = await requirePropostasAccess();
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     .insert([
       {
         nome: nome.trim(),
-        conteudo_template: conteudo_template?.trim() ?? "",
+        conteudo_template: normalizeContractText(conteudo_template?.trim() ?? ""),
         arquivo_url: arquivo_url ?? null,
         arquivo_nome: arquivo_nome ?? null,
         mime_type: mime_type ?? null,

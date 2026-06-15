@@ -38,54 +38,68 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/contratos") ||
     pathname.startsWith("/configuracoes");
   const isAuthPage = pathname === "/login";
+  const isConvitePage = pathname === "/convite";
 
   if (isProtected && !user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (isProtected && user && pathname.startsWith("/contratos")) {
-    const userId = user.sub as string | undefined;
-    if (userId) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", userId)
-        .maybeSingle();
+  const userId = user?.sub as string | undefined;
+  let accessProfile: { role: string; convite_status: string; ativo: boolean } | null = null;
 
-      if (profile?.role === "consultor") {
-        return NextResponse.redirect(new URL("/clientes", request.url));
-      }
+  if (userId && (isProtected || isAuthPage || isConvitePage || pathname === "/")) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("role, convite_status, ativo")
+      .eq("id", userId)
+      .maybeSingle();
+
+    accessProfile = data;
+  }
+
+  const hasActiveAccess =
+    !!accessProfile?.ativo && accessProfile.convite_status === "aceito";
+
+  if (isProtected && user && !hasActiveAccess) {
+    await supabase.auth.signOut();
+    const redirectUrl = new URL("/login", request.url);
+    redirectUrl.searchParams.set("error", "conta_nao_ativada");
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  if (isProtected && user && pathname.startsWith("/contratos")) {
+    if (accessProfile?.role === "consultor") {
+      return NextResponse.redirect(new URL("/clientes", request.url));
     }
   }
 
   if (isProtected && user && pathname.startsWith("/configuracoes")) {
-    const userId = user.sub as string | undefined;
-    if (userId) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", userId)
-        .maybeSingle();
+    const isUsuariosConfig =
+      pathname.startsWith("/configuracoes/usuarios") ||
+      pathname.startsWith("/configuracoes/tipos-usuario") ||
+      pathname.startsWith("/configuracoes/permissoes");
 
-      const isUsuariosConfig =
-        pathname.startsWith("/configuracoes/usuarios") ||
-        pathname.startsWith("/configuracoes/tipos-usuario") ||
-        pathname.startsWith("/configuracoes/permissoes");
+    if (isUsuariosConfig && accessProfile?.role !== "admin") {
+      return NextResponse.redirect(new URL("/clientes", request.url));
+    }
 
-      if (isUsuariosConfig && profile?.role !== "admin") {
-        return NextResponse.redirect(new URL("/clientes", request.url));
-      }
-
-      if (profile?.role === "consultor" && !isUsuariosConfig) {
-        return NextResponse.redirect(new URL("/clientes", request.url));
-      }
+    if (accessProfile?.role === "consultor" && !isUsuariosConfig) {
+      return NextResponse.redirect(new URL("/clientes", request.url));
     }
   }
 
-  if (isAuthPage && user) {
-    return NextResponse.redirect(new URL("/clientes", request.url));
+  if (isConvitePage && user) {
+    await supabase.auth.signOut();
   }
-  if (pathname === "/" && user) {
+
+  if (isAuthPage && user) {
+    if (hasActiveAccess) {
+      return NextResponse.redirect(new URL("/clientes", request.url));
+    }
+    await supabase.auth.signOut();
+  }
+
+  if (pathname === "/" && user && hasActiveAccess) {
     return NextResponse.redirect(new URL("/clientes", request.url));
   }
 

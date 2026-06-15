@@ -3,11 +3,8 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
-import type { UsuarioProfile, NivelPermissao } from "@/lib/types";
-import {
-  CONVITE_STATUS_LABELS,
-  NIVEL_PERMISSAO_LABELS,
-} from "@/lib/usuarios";
+import type { UsuarioProfile } from "@/lib/types";
+import { CONVITE_STATUS_LABELS } from "@/lib/usuarios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,7 +41,6 @@ export default function UsuariosPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [tipoId, setTipoId] = useState("");
-  const [nivel, setNivel] = useState<NivelPermissao>("visualizar");
 
   const { data: usuarios = [], isLoading } = useQuery({
     queryKey: ["usuarios"],
@@ -62,14 +58,12 @@ export default function UsuariosPage() {
         return dbService.updateUsuario(editing.id, {
           full_name: fullName,
           tipo_usuario_id: tipoId,
-          nivel_permissao: nivel,
         });
       }
       return dbService.convidarUsuario({
         email,
         full_name: fullName,
         tipo_usuario_id: tipoId,
-        nivel_permissao: nivel,
       });
     },
     onSuccess: (data) => {
@@ -102,7 +96,6 @@ export default function UsuariosPage() {
     setFullName("");
     setEmail("");
     setTipoId(tipos.find((t) => t.ativo)?.id ?? "");
-    setNivel("visualizar");
     setIsModalOpen(true);
   };
 
@@ -111,9 +104,15 @@ export default function UsuariosPage() {
     setFullName(usuario.full_name ?? "");
     setEmail(usuario.email);
     setTipoId(usuario.tipo_usuario_id ?? "");
-    setNivel(usuario.nivel_permissao ?? "visualizar");
     setIsModalOpen(true);
   };
+
+  const tipoLabel =
+    tipoId === ""
+      ? null
+      : tipos.find((t) => t.id === tipoId)?.nome ??
+        editing?.tipo_usuario?.nome ??
+        null;
 
   return (
     <div className="flex flex-col gap-6 w-full text-zinc-100">
@@ -124,7 +123,7 @@ export default function UsuariosPage() {
             Usuários
           </h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Cadastre usuários, defina tipo e permissão. O convite é enviado por e-mail via Supabase.
+            Cadastre usuários e defina o tipo. As permissões seguem a configuração do tipo de usuário.
           </p>
         </div>
         <Button
@@ -149,7 +148,6 @@ export default function UsuariosPage() {
                   <TableHead className="text-zinc-400 text-xs uppercase">Nome</TableHead>
                   <TableHead className="text-zinc-400 text-xs uppercase">E-mail</TableHead>
                   <TableHead className="text-zinc-400 text-xs uppercase">Tipo</TableHead>
-                  <TableHead className="text-zinc-400 text-xs uppercase">Nível</TableHead>
                   <TableHead className="text-zinc-400 text-xs uppercase">Status</TableHead>
                   <TableHead className="text-zinc-400 text-xs uppercase">Convite</TableHead>
                   <TableHead className="text-right text-zinc-400 text-xs uppercase">Ações</TableHead>
@@ -164,11 +162,6 @@ export default function UsuariosPage() {
                     <TableCell className="text-zinc-300">{u.email}</TableCell>
                     <TableCell className="text-zinc-400 text-sm">
                       {u.tipo_usuario?.nome ?? u.role}
-                    </TableCell>
-                    <TableCell className="text-zinc-400 text-sm">
-                      {u.nivel_permissao
-                        ? NIVEL_PERMISSAO_LABELS[u.nivel_permissao]
-                        : "—"}
                     </TableCell>
                     <TableCell>
                       <span
@@ -247,8 +240,8 @@ export default function UsuariosPage() {
               </DialogTitle>
               <DialogDescription className="text-zinc-400">
                 {editing
-                  ? "Atualize tipo e nível de permissão do usuário."
-                  : "Um e-mail de convite será enviado para o usuário definir a senha e ativar o acesso."}
+                  ? "Atualize o tipo de usuário. As permissões seguem a configuração do tipo selecionado."
+                  : "Um e-mail de convite será enviado com link para o usuário aceitar o convite e criar a senha de acesso."}
               </DialogDescription>
             </DialogHeader>
 
@@ -280,7 +273,7 @@ export default function UsuariosPage() {
                 <Label>Tipo de usuário *</Label>
                 <Select value={tipoId} onValueChange={(v) => v && setTipoId(v)} required>
                   <SelectTrigger className="w-full bg-zinc-900 border-zinc-800">
-                    <SelectValue placeholder="Selecione o tipo" />
+                    <SelectValue placeholder="Selecione o tipo">{tipoLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-zinc-900 border-zinc-800">
                     {tipos
@@ -290,24 +283,6 @@ export default function UsuariosPage() {
                           {t.nome}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Nível de permissão *</Label>
-                <Select
-                  value={nivel}
-                  onValueChange={(v) => v && setNivel(v as NivelPermissao)}
-                >
-                  <SelectTrigger className="w-full bg-zinc-900 border-zinc-800">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-zinc-900 border-zinc-800">
-                    {(Object.keys(NIVEL_PERMISSAO_LABELS) as NivelPermissao[]).map((k) => (
-                      <SelectItem key={k} value={k}>
-                        {NIVEL_PERMISSAO_LABELS[k]}
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
               </div>

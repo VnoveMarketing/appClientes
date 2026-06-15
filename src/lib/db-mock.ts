@@ -14,6 +14,7 @@ export interface Cliente {
   estado?: string;
   cor_principal?: string | null;
   logo_url?: string | null;
+  hero_image_url?: string | null;
   categoria_case_id?: string | null;
   status: 'Ativa' | 'Bloqueada' | 'Pendente';
   assinatura: 'active' | 'canceled';

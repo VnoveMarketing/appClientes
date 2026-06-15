@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import type { TipoUsuario, NivelPermissao, Permissao } from "@/lib/types";
-import { NIVEL_PERMISSAO_LABELS } from "@/lib/usuarios";
+import { NIVEL_PERMISSAO_LABELS, NIVEL_PERMISSAO_OPTIONS } from "@/lib/usuarios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -239,16 +239,16 @@ export default function TiposUsuarioPage() {
                           }
                         >
                           <SelectTrigger className="w-28 h-8 bg-zinc-900 border-zinc-800 text-xs">
-                            <SelectValue />
+                            <SelectValue>
+                              {NIVEL_PERMISSAO_LABELS[draft?.nivel ?? "visualizar"]}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent className="bg-zinc-900 border-zinc-800">
-                            {(Object.keys(NIVEL_PERMISSAO_LABELS) as NivelPermissao[]).map(
-                              (k) => (
-                                <SelectItem key={k} value={k}>
-                                  {NIVEL_PERMISSAO_LABELS[k]}
-                                </SelectItem>
-                              )
-                            )}
+                            {NIVEL_PERMISSAO_OPTIONS.map((k) => (
+                              <SelectItem key={k} value={k}>
+                                {NIVEL_PERMISSAO_LABELS[k]}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>

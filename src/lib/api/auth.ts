@@ -36,7 +36,7 @@ async function getAuthenticatedUser(): Promise<AuthSuccess | AuthError> {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, convite_status, ativo")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -46,6 +46,21 @@ async function getAuthenticatedUser(): Promise<AuthSuccess | AuthError> {
 
   if (!profile?.role) {
     return { error: errorResponse("Acesso negado", 403) };
+  }
+
+  if (!profile.ativo) {
+    return {
+      error: errorResponse("Sua conta está inativa. Contate o administrador.", 403),
+    };
+  }
+
+  if (profile.convite_status !== "aceito") {
+    return {
+      error: errorResponse(
+        "Acesso não ativado. Aceite o convite recebido por e-mail e crie sua senha.",
+        403
+      ),
+    };
   }
 
   return {

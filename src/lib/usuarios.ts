@@ -1,4 +1,18 @@
-export type NivelPermissao = "visualizar" | "editar" | "total";
+export type NivelPermissao = "bloquear" | "visualizar" | "editar" | "total";
+
+export const NIVEL_PERMISSAO_OPTIONS: NivelPermissao[] = [
+  "bloquear",
+  "visualizar",
+  "editar",
+  "total",
+];
+
+export const NIVEL_PERMISSAO_LABELS: Record<NivelPermissao, string> = {
+  bloquear: "Bloquear",
+  visualizar: "Visualizar",
+  editar: "Editar",
+  total: "Total",
+};
 
 export type TipoUsuario = {
   id: string;
@@ -43,12 +57,6 @@ export type UsuarioProfile = {
   tipo_usuario?: TipoUsuario | null;
 };
 
-export const NIVEL_PERMISSAO_LABELS: Record<NivelPermissao, string> = {
-  visualizar: "Visualizar",
-  editar: "Editar",
-  total: "Total",
-};
-
 export const CONVITE_STATUS_LABELS: Record<UsuarioProfile["convite_status"], string> = {
   pendente: "Convite pendente",
   aceito: "Ativo",
@@ -56,12 +64,17 @@ export const CONVITE_STATUS_LABELS: Record<UsuarioProfile["convite_status"], str
 };
 
 const NIVEL_RANK: Record<NivelPermissao, number> = {
+  bloquear: 0,
   visualizar: 1,
   editar: 2,
   total: 3,
 };
 
+export function isNivelBloqueado(nivel: NivelPermissao | null | undefined) {
+  return nivel === "bloquear";
+}
+
 export function nivelAtende(minimo: NivelPermissao, atual: NivelPermissao | null | undefined) {
-  if (!atual) return false;
+  if (!atual || atual === "bloquear") return false;
   return NIVEL_RANK[atual] >= NIVEL_RANK[minimo];
 }

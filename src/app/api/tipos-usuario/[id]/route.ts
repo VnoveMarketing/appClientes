@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { getAdminSupabase } from "@/lib/api/admin-db";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -25,7 +26,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (ordem !== undefined) updates.ordem = ordem;
   if (ativo !== undefined) updates.ativo = ativo;
 
-  const { data, error } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data, error } = await supabase
     .from("tipos_usuario")
     .update(updates)
     .eq("id", id)
@@ -35,9 +37,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (error) return errorResponse(error.message, 500);
 
   if (permissoes !== undefined) {
-    await auth.supabase.from("tipo_usuario_permissoes").delete().eq("tipo_usuario_id", id);
+    await supabase.from("tipo_usuario_permissoes").delete().eq("tipo_usuario_id", id);
     if (permissoes.length > 0) {
-      const { error: permError } = await auth.supabase.from("tipo_usuario_permissoes").insert(
+      const { error: permError } = await supabase.from("tipo_usuario_permissoes").insert(
         permissoes.map((p) => ({
           tipo_usuario_id: id,
           permissao_id: p.permissao_id,
@@ -56,7 +58,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
-  const { count } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { count } = await supabase
     .from("profiles")
     .select("id", { count: "exact", head: true })
     .eq("tipo_usuario_id", id);
@@ -65,7 +68,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return errorResponse("Não é possível excluir: existem usuários vinculados a este tipo", 400);
   }
 
-  const { error } = await auth.supabase.from("tipos_usuario").delete().eq("id", id);
+  const { error } = await supabase.from("tipos_usuario").delete().eq("id", id);
   if (error) return errorResponse(error.message, 500);
   return jsonResponse({ success: true });
 }

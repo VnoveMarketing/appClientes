@@ -1,14 +1,14 @@
 import { NextRequest } from "next/server";
 import { requireAdmin, jsonResponse, errorResponse } from "@/lib/api/auth";
 import { getAdminSupabase } from "@/lib/api/admin-db";
-import { getAppUrl } from "@/lib/email/resend";
-import type { NivelPermissao } from "@/lib/usuarios";
+import { provisionUsuarioConvite } from "@/lib/convite";
 
 export async function GET() {
   const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
 
-  const { data, error } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data, error } = await supabase
     .from("profiles")
     .select("*, tipos_usuario(*)")
     .order("created_at", { ascending: false });
@@ -30,18 +30,18 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { email, full_name, tipo_usuario_id, nivel_permissao } = body as {
+  const { email, full_name, tipo_usuario_id } = body as {
     email: string;
     full_name: string;
     tipo_usuario_id: string;
-    nivel_permissao: NivelPermissao;
   };
 
-  if (!email?.trim() || !full_name?.trim() || !tipo_usuario_id || !nivel_permissao) {
-    return errorResponse("E-mail, nome, tipo de usuário e nível de permissão são obrigatórios");
+  if (!email?.trim() || !full_name?.trim() || !tipo_usuario_id) {
+    return errorResponse("E-mail, nome e tipo de usuário são obrigatórios");
   }
 
-  const { data: tipo, error: tipoError } = await auth.supabase
+  const supabase = getAdminSupabase();
+  const { data: tipo, error: tipoError } = await supabase
     .from("tipos_usuario")
     .select("id, slug, nome, ativo")
     .eq("id", tipo_usuario_id)
@@ -51,65 +51,42 @@ export async function POST(request: NextRequest) {
   if (!tipo) return errorResponse("Tipo de usuário não encontrado", 404);
   if (!tipo.ativo) return errorResponse("Tipo de usuário inativo", 400);
 
-  const admin = getAdminSupabase();
-  const normalizedEmail = email.trim().toLowerCase();
-  const now = new Date().toISOString();
-  const redirectTo = `${getAppUrl()}/auth/callback?next=/clientes`;
+  try {
+    const result = await provisionUsuarioConvite({
+      email: email.trim(),
+      full_name: full_name.trim(),
+      tipo_usuario_id: tipo.id,
+      tipo_slug: tipo.slug,
+      tipo_nome: tipo.nome,
+    });
 
-  const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-    normalizedEmail,
-    {
-      redirectTo,
-      data: {
-        full_name: full_name.trim(),
-        role: tipo.slug,
-        tipo_usuario_id: tipo.id,
-        nivel_permissao,
-      },
-    }
-  );
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*, tipos_usuario(*)")
+      .eq("id", result.profileId)
+      .single();
 
-  if (inviteError) {
-    return errorResponse(inviteError.message, 400);
-  }
+    if (profileError) return errorResponse(profileError.message, 500);
 
-  const userId = inviteData.user?.id;
-  if (!userId) {
-    return errorResponse("Convite enviado, mas não foi possível obter o ID do usuário", 500);
-  }
+    const { tipos_usuario, ...rest } = profile as Record<string, unknown> & {
+      tipos_usuario: Record<string, unknown> | null;
+    };
 
-  const { data: profile, error: profileError } = await admin
-    .from("profiles")
-    .upsert(
+    const message = result.emailSent
+      ? "Convite enviado por e-mail. O usuário deve aceitar o convite e criar uma senha para acessar o sistema."
+      : `Convite criado, mas o e-mail não foi enviado: ${result.emailError ?? "erro desconhecido"}`;
+
+    return jsonResponse(
       {
-        id: userId,
-        email: normalizedEmail,
-        full_name: full_name.trim(),
-        role: tipo.slug,
-        tipo_usuario_id: tipo.id,
-        nivel_permissao,
-        convite_status: "pendente",
-        convite_enviado_em: now,
-        convite_aceito_em: null,
-        ativo: true,
+        ...rest,
+        tipo_usuario: tipos_usuario,
+        message,
+        email_sent: result.emailSent,
       },
-      { onConflict: "id" }
-    )
-    .select("*, tipos_usuario(*)")
-    .single();
-
-  if (profileError) return errorResponse(profileError.message, 500);
-
-  const { tipos_usuario, ...rest } = profile as Record<string, unknown> & {
-    tipos_usuario: Record<string, unknown> | null;
-  };
-
-  return jsonResponse(
-    {
-      ...rest,
-      tipo_usuario: tipos_usuario,
-      message: "Convite enviado por e-mail. O usuário deve aceitar para ativar o acesso.",
-    },
-    201
-  );
+      201
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao enviar convite";
+    return errorResponse(message, 400);
+  }
 }

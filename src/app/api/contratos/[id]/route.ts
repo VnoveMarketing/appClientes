@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireContratosAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
 import { hashDocumentContent } from "@/lib/signature-audit";
+import { normalizeContractText } from "@/lib/contract-builder";
 import type { Cliente } from "@/lib/types";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -67,7 +68,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   if (typeof updates.conteudo_contrato === "string") {
-    updates.documento_hash_sha256 = hashDocumentContent(updates.conteudo_contrato);
+    const conteudoNormalizado = normalizeContractText(updates.conteudo_contrato);
+    updates.conteudo_contrato = conteudoNormalizado;
+    updates.documento_hash_sha256 = hashDocumentContent(conteudoNormalizado);
   }
 
   const { data, error } = await auth.supabase

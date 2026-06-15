@@ -72,7 +72,10 @@ export default function ClientesPage() {
   const [categoriaCaseId, setCategoriaCaseId] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [heroPreview, setHeroPreview] = useState<string | null>(null);
   const logoInputRef = React.useRef<HTMLInputElement>(null);
+  const heroInputRef = React.useRef<HTMLInputElement>(null);
 
   // TanStack Query fetching
   const { data: clientes = [], isLoading } = useQuery({
@@ -126,6 +129,8 @@ export default function ClientesPage() {
     setCategoriaCaseId("");
     setLogoFile(null);
     setLogoPreview(null);
+    setHeroFile(null);
+    setHeroPreview(null);
     setIsModalOpen(true);
   };
 
@@ -141,6 +146,8 @@ export default function ClientesPage() {
     setCategoriaCaseId(cliente.categoria_case_id ?? "");
     setLogoFile(null);
     setLogoPreview(cliente.logo_url ?? null);
+    setHeroFile(null);
+    setHeroPreview(cliente.hero_image_url ?? null);
     setIsModalOpen(true);
   };
 
@@ -170,17 +177,28 @@ export default function ClientesPage() {
         if (logoFile) {
           await dbService.uploadClienteLogo(selectedCliente.id, logoFile);
         }
+        if (heroFile) {
+          await dbService.uploadClienteHeroImage(selectedCliente.id, heroFile);
+        }
       } else {
         const created = await addMutation.mutateAsync(payload);
         if (logoFile) {
           await dbService.uploadClienteLogo(created.id, logoFile);
         }
+        if (heroFile) {
+          await dbService.uploadClienteHeroImage(created.id, heroFile);
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
       closeModal();
-    } catch {
-      // mutations já tratam erro via estado
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Erro ao salvar cliente");
     }
+  };
+
+  const openFilePicker = (input: HTMLInputElement | null) => {
+    if (input) input.value = "";
+    input?.click();
   };
 
   const handleLogoChange = (file: File | undefined) => {
@@ -191,6 +209,16 @@ export default function ClientesPage() {
     }
     setLogoFile(file);
     setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const handleHeroChange = (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.type)) {
+      alert("A imagem de fundo deve ser PNG, JPG ou WEBP.");
+      return;
+    }
+    setHeroFile(file);
+    setHeroPreview(URL.createObjectURL(file));
   };
 
   const handleDelete = (id: string) => {
@@ -582,6 +610,39 @@ export default function ClientesPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
+                <Label>Imagem de fundo da proposta</Label>
+                <p className="text-xs text-zinc-500">
+                  Usada na hero section da proposta comercial (PNG, JPG ou WEBP).
+                </p>
+                <input
+                  ref={heroInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  className="hidden"
+                  onChange={(e) => handleHeroChange(e.target.files?.[0])}
+                />
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-zinc-700 text-zinc-300"
+                    onClick={() => openFilePicker(heroInputRef.current)}
+                  >
+                    <ImageIcon className="size-4 mr-2" />
+                    {heroPreview ? "Trocar imagem" : "Enviar imagem"}
+                  </Button>
+                  {heroPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={heroPreview}
+                      alt="Imagem de fundo da proposta"
+                      className="h-16 w-28 object-cover rounded border border-zinc-800"
+                    />
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
                 <Label>Logo do cliente (PNG)</Label>
                 <input
                   ref={logoInputRef}
@@ -595,7 +656,7 @@ export default function ClientesPage() {
                     type="button"
                     variant="outline"
                     className="border-zinc-700 text-zinc-300"
-                    onClick={() => logoInputRef.current?.click()}
+                    onClick={() => openFilePicker(logoInputRef.current)}
                   >
                     <ImageIcon className="size-4 mr-2" />
                     {logoPreview ? "Trocar logo" : "Enviar logo"}

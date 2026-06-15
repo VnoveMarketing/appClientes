@@ -6,8 +6,10 @@ import { dbService } from "@/lib/db-service";
 import { Contrato, Proposta, ContratoAssinaturaEvidencias } from "@/lib/types";
 import {
   buildContractContent,
+  buildContractContentResolved,
   buildDetalhesFinanceiros,
   getContractFinancialValues,
+  normalizeContractText,
 } from "@/lib/contract-builder";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -67,6 +69,9 @@ export default function ContratosPage() {
   const [revisaoMensal, setRevisaoMensal] = useState("");
   const [revisaoDetalhes, setRevisaoDetalhes] = useState("");
   const [revisaoConteudo, setRevisaoConteudo] = useState("");
+  const [revisaoDescontoSetup, setRevisaoDescontoSetup] = useState("");
+  const [revisaoDescontoMensalidade, setRevisaoDescontoMensalidade] = useState("");
+  const [revisaoCondicaoDescricao, setRevisaoCondicaoDescricao] = useState("");
 
   const { data: evidencias, isLoading: loadingEvidencias, error: evidenciasError } = useQuery({
     queryKey: ["contrato-evidencias", evidenciasContratoId],
@@ -91,6 +96,18 @@ export default function ContratosPage() {
   const { data: clientes = [] } = useQuery({
     queryKey: ["clientes"],
     queryFn: dbService.getClientes,
+    enabled: hasMounted,
+  });
+
+  const { data: contratoModelos = [] } = useQuery({
+    queryKey: ["contrato-modelos"],
+    queryFn: dbService.getContratoModelos,
+    enabled: hasMounted,
+  });
+
+  const { data: tiposServico = [] } = useQuery({
+    queryKey: ["tipos-servico"],
+    queryFn: dbService.getTiposServico,
     enabled: hasMounted,
   });
 
@@ -187,15 +204,38 @@ export default function ContratosPage() {
   const revisarMutation = useMutation({
     mutationFn: async () => {
       if (!revisaoContrato) return;
-      return dbService.revisarContrato(revisaoContrato.id, {
+
+      const proposta = propostas.find((p) => p.id === revisaoContrato.proposta_id);
+      if (proposta) {
+        await dbService.updateProposta(revisaoContrato.proposta_id, {
+          desconto_setup: parseFloat(revisaoDescontoSetup) || 0,
+          desconto_mensalidade: parseFloat(revisaoDescontoMensalidade) || 0,
+          condicao_descricao: revisaoCondicaoDescricao.trim() || "Nenhuma",
+        });
+      }
+
+      const conteudoAtualizado = revisaoValoresAlterados()
+        ? rebuildRevisaoConteudo()
+        : revisaoConteudo;
+
+      const contratoAtualizado = await dbService.revisarContrato(revisaoContrato.id, {
         valor_final_setup: parseFloat(revisaoSetup),
         valor_final_mensal: parseFloat(revisaoMensal),
         detalhes_financeiros: revisaoDetalhes,
-        conteudo_contrato: revisaoConteudo,
+        conteudo_contrato: conteudoAtualizado,
       });
+
+      return { contratoAtualizado, conteudoAtualizado };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (result?.conteudoAtualizado) {
+        setRevisaoConteudo(result.conteudoAtualizado);
+      }
+      if (result?.contratoAtualizado) {
+        setRevisaoContrato(result.contratoAtualizado);
+      }
       queryClient.invalidateQueries({ queryKey: ["contratos"] });
+      queryClient.invalidateQueries({ queryKey: ["propostas"] });
     },
   });
 
@@ -209,17 +249,149 @@ export default function ContratosPage() {
   });
 
   const openRevisaoModal = (contrato: Contrato) => {
+    const proposta = propostas.find((p) => p.id === contrato.proposta_id);
+
     setRevisaoContrato(contrato);
     setRevisaoSetup(String(contrato.valor_final_setup));
     setRevisaoMensal(String(contrato.valor_final_mensal));
     setRevisaoDetalhes(contrato.detalhes_financeiros);
-    setRevisaoConteudo(contrato.conteudo_contrato);
+    setRevisaoConteudo(normalizeContractText(contrato.conteudo_contrato));
+    setRevisaoDescontoSetup(String(proposta?.desconto_setup ?? 0));
+    setRevisaoDescontoMensalidade(String(proposta?.desconto_mensalidade ?? 0));
+    setRevisaoCondicaoDescricao(
+      proposta?.condicao_descricao && proposta.condicao_descricao !== "Nenhuma"
+        ? proposta.condicao_descricao
+        : ""
+    );
+  };
+
+  const getRevisaoProposta = () =>
+    revisaoContrato ? propostas.find((p) => p.id === revisaoContrato.proposta_id) : undefined;
+
+  const getRevisaoPropostaAtualizada = () => {
+    const proposta = getRevisaoProposta();
+    if (!proposta) return undefined;
+
+    return {
+      ...proposta,
+      desconto_setup: parseFloat(revisaoDescontoSetup) || 0,
+      desconto_mensalidade: parseFloat(revisaoDescontoMensalidade) || 0,
+      condicao_descricao: revisaoCondicaoDescricao.trim() || "Nenhuma",
+    };
+  };
+
+  const revisaoValoresAlterados = () => {
+    if (!revisaoContrato) return false;
+
+    const proposta = getRevisaoProposta();
+    const setupAtual = parseFloat(revisaoSetup);
+    const mensalAtual = parseFloat(revisaoMensal);
+    const descontoSetupAtual = parseFloat(revisaoDescontoSetup) || 0;
+    const descontoMensalAtual = parseFloat(revisaoDescontoMensalidade) || 0;
+    const condicaoAtual = revisaoCondicaoDescricao.trim() || "Nenhuma";
+    const condicaoOriginal =
+      proposta?.condicao_descricao && proposta.condicao_descricao !== "Nenhuma"
+        ? proposta.condicao_descricao.trim()
+        : "Nenhuma";
+
+    return (
+      setupAtual !== revisaoContrato.valor_final_setup ||
+      mensalAtual !== revisaoContrato.valor_final_mensal ||
+      descontoSetupAtual !== (proposta?.desconto_setup ?? 0) ||
+      descontoMensalAtual !== (proposta?.desconto_mensalidade ?? 0) ||
+      condicaoAtual !== condicaoOriginal ||
+      revisaoDetalhes !== revisaoContrato.detalhes_financeiros
+    );
+  };
+
+  const rebuildRevisaoConteudo = () => {
+    const proposta = getRevisaoPropostaAtualizada();
+    if (!proposta || !revisaoContrato) return revisaoConteudo;
+
+    const cliente = clientes.find((c) => c.id === revisaoContrato.cliente_id);
+    const tipoServico = proposta.tipo_servico_id
+      ? tiposServico.find((t) => t.id === proposta.tipo_servico_id)
+      : undefined;
+    const modeloAtivo = contratoModelos.find((m) => m.ativo);
+
+    return buildContractContentResolved(
+      proposta,
+      {
+        empresa: cliente?.empresa ?? "CONTRATANTE",
+        cnpj: cliente?.cnpj,
+        cidade: cliente?.cidade,
+        estado: cliente?.estado,
+        nome: cliente?.nome,
+      },
+      {
+        template: modeloAtivo?.conteudo_template,
+        tipoServicoNome: tipoServico?.nome ?? null,
+        campos: tipoServico?.campos?.map((campo) => ({
+          chave: campo.chave,
+          label: campo.label,
+          tipo_campo: campo.tipo_campo,
+        })),
+        valorSetup: parseFloat(revisaoSetup),
+        valorMensal: parseFloat(revisaoMensal),
+      }
+    );
+  };
+
+  const applyRevisaoDescontos = (
+    descontoSetup: number,
+    descontoMensalidade: number,
+    condicaoDescricao?: string
+  ) => {
+    const proposta = getRevisaoProposta();
+    if (!proposta) return;
+
+    const { valor_final_setup, valor_final_mensal } = getContractFinancialValues({
+      ...proposta,
+      desconto_setup: descontoSetup,
+      desconto_mensalidade: descontoMensalidade,
+    });
+
+    setRevisaoSetup(String(valor_final_setup));
+    setRevisaoMensal(String(valor_final_mensal));
+
+    if (condicaoDescricao !== undefined) {
+      setRevisaoDetalhes(
+        buildDetalhesFinanceiros({
+          ...proposta,
+          condicao_descricao: condicaoDescricao.trim() || "Nenhuma",
+        })
+      );
+    }
+  };
+
+  const handleRevisaoDescontoSetupChange = (value: string) => {
+    setRevisaoDescontoSetup(value);
+    applyRevisaoDescontos(parseFloat(value) || 0, parseFloat(revisaoDescontoMensalidade) || 0);
+  };
+
+  const handleRevisaoDescontoMensalidadeChange = (value: string) => {
+    setRevisaoDescontoMensalidade(value);
+    applyRevisaoDescontos(parseFloat(revisaoDescontoSetup) || 0, parseFloat(value) || 0);
+  };
+
+  const handleRevisaoCondicaoChange = (value: string) => {
+    setRevisaoCondicaoDescricao(value);
+    applyRevisaoDescontos(
+      parseFloat(revisaoDescontoSetup) || 0,
+      parseFloat(revisaoDescontoMensalidade) || 0,
+      value
+    );
   };
 
   const handleSalvarRevisao = async (e: React.FormEvent) => {
     e.preventDefault();
+    const valoresAlterados = revisaoValoresAlterados();
     await revisarMutation.mutateAsync();
-    alert("Alterações salvas.");
+    alert(
+      valoresAlterados
+        ? "Alterações salvas. O texto do contrato foi atualizado com os novos valores."
+        : "Alterações salvas."
+    );
   };
 
   const handleLiberarAssinatura = async () => {
@@ -636,6 +808,53 @@ export default function ContratosPage() {
                     required
                     className="bg-zinc-900 border-zinc-800"
                   />
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-800/80 pt-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Condições especiais</h3>
+                {getRevisaoProposta() ? (
+                  <p className="text-xs text-zinc-500 mb-3">
+                    Valores base da proposta: setup{" "}
+                    {formatBRL(getRevisaoProposta()!.setup)} · mensalidade{" "}
+                    {formatBRL(getRevisaoProposta()!.mensalidade)}
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="revisaoDescontoSetup">Desconto no setup (%)</Label>
+                    <Input
+                      id="revisaoDescontoSetup"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={revisaoDescontoSetup}
+                      onChange={(e) => handleRevisaoDescontoSetupChange(e.target.value)}
+                      className="bg-zinc-900 border-zinc-800"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="revisaoDescontoMensalidade">Desconto mensalidade (%)</Label>
+                    <Input
+                      id="revisaoDescontoMensalidade"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={revisaoDescontoMensalidade}
+                      onChange={(e) => handleRevisaoDescontoMensalidadeChange(e.target.value)}
+                      className="bg-zinc-900 border-zinc-800"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="revisaoCondicaoDescricao">Descrição da condição</Label>
+                    <Input
+                      id="revisaoCondicaoDescricao"
+                      value={revisaoCondicaoDescricao}
+                      onChange={(e) => handleRevisaoCondicaoChange(e.target.value)}
+                      placeholder="Ex: 50% nos 3 primeiros meses"
+                      className="bg-zinc-900 border-zinc-800"
+                    />
+                  </div>
                 </div>
               </div>
 

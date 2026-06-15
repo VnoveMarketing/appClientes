@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireContratosAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { normalizeContractText } from "@/lib/contract-builder";
 
 function extractTextFromDocxBuffer(buffer: Buffer): Promise<string> {
   return import("mammoth").then(({ extractRawText }) =>
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     return jsonResponse({
-      conteudo_template: text.trim(),
+      conteudo_template: normalizeContractText(text.trim()),
       arquivo_nome: file.name,
       mime_type: mime || null,
     });

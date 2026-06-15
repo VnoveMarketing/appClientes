@@ -5,6 +5,13 @@ import { uploadPropostaAsset } from "@/lib/storage-upload";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+const ALLOWED_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+};
+
 export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const auth = await requireClientesAccess();
@@ -18,17 +25,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return errorResponse("Arquivo não enviado");
     }
 
-    if (file.type !== "image/png") {
-      return errorResponse("O logo do cliente deve ser PNG");
+    const ext = ALLOWED_EXTENSIONS[file.type];
+    if (!ext) {
+      return errorResponse("Use PNG, JPG ou WEBP para a imagem de fundo");
     }
 
-    const path = `clientes/${id}/logo.png`;
-    const logo_url = await uploadPropostaAsset(file, path);
+    const path = `clientes/${id}/hero.${ext}`;
+    const hero_image_url = await uploadPropostaAsset(file, path);
 
     const admin = getAdminSupabase();
     const { data, error } = await admin
       .from("clientes")
-      .update({ logo_url })
+      .update({ hero_image_url })
       .eq("id", id)
       .select()
       .single();

@@ -11,15 +11,18 @@ export async function GET(request: Request) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
+
     if (!error && sessionData.user) {
-      await supabase
+      const { data: profile } = await supabase
         .from("profiles")
-        .update({
-          convite_status: "aceito",
-          convite_aceito_em: new Date().toISOString(),
-          ativo: true,
-        })
-        .eq("id", sessionData.user.id);
+        .select("convite_status, ativo")
+        .eq("id", sessionData.user.id)
+        .maybeSingle();
+
+      if (!profile?.ativo || profile.convite_status !== "aceito") {
+        await supabase.auth.signOut();
+        return NextResponse.redirect(`${origin}/login?error=conta_nao_ativada`);
+      }
 
       return NextResponse.redirect(`${origin}${next}`);
     }

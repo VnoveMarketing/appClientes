@@ -83,6 +83,33 @@ function buildAndSend(
   });
 }
 
+export async function sendUsuarioConviteEmail(params: {
+  to: string;
+  fullName: string;
+  tipoNome?: string;
+  conviteUrl: string;
+}) {
+  const tipoTexto = params.tipoNome ? ` como <strong>${params.tipoNome}</strong>` : "";
+
+  return buildAndSend(
+    "sendUsuarioConvite",
+    params.to,
+    "Convite de acesso — Agência Vnove CRM",
+    {
+      title: "Você foi convidado(a) para o CRM",
+      greeting: `Olá, ${params.fullName}!`,
+      body:
+        `Você recebeu um convite para acessar o portal interno da Agência Vnove${tipoTexto}. ` +
+        `Para ativar sua conta, clique no botão abaixo, confirme seus dados e crie uma senha de acesso. ` +
+        `O link é pessoal e válido por ${7} dias.`,
+      ctaLabel: "Aceitar convite e criar senha",
+      ctaUrl: params.conviteUrl,
+      footerNote:
+        "Se você não esperava este convite, ignore este e-mail. Após criar sua senha, use o portal de login para entrar no sistema.",
+    }
+  );
+}
+
 export async function notifyPropostaPronta(
   propostaId: string,
   clienteId: string,

@@ -1,11 +1,28 @@
 "use client";
 
-import React, { useState, use } from "react";
+import React, { useState, use, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import Link from "next/link";
 import { AgencyLogo } from "@/components/agency-brand";
 import { useRouter } from "next/navigation";
+import { formatCnpjInput, isCnpjComplete, stripCnpj } from "@/lib/cnpj-brasil-api";
+import {
+  buildClienteDadosFromCnpjLookup,
+  clienteTemCadastroCnpj,
+} from "@/lib/cliente-cadastro";
+import type { Cliente } from "@/lib/types";
+
+type CnpjFormData = {
+  empresa?: string;
+  cnpj?: string;
+  email?: string;
+  telefone?: string;
+  cidade?: string;
+  estado?: string;
+  ramo_atividade?: string;
+  nome?: string;
+};
 
 export default function AceitarPropostaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -20,13 +37,10 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
   const [cidade, setCidade] = useState("");
   const [estado, setEstado] = useState("");
   const [responsavelLegal, setResponsavelLegal] = useState("");
-  const [cartaoPreview, setCartaoPreview] = useState<{
-    type: "image" | "pdf";
-    src: string;
-    name: string;
-  } | null>(null);
-  const [extractError, setExtractError] = useState<string | null>(null);
-  const [isExtracting, setIsExtracting] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupInfo, setLookupInfo] = useState<string | null>(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const lastLookupRef = useRef<string>("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["public-proposta", id],
@@ -42,85 +56,104 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
       setEmailCorporativo(client.email || "");
       setTelefonePrincipal(client.telefone || "");
       setResponsavelLegal(client.nome || "");
-      setCnpj(client.cnpj || "");
+      setCnpj(client.cnpj ? formatCnpjInput(client.cnpj) : "");
+      if (client.cnpj) {
+        lastLookupRef.current = stripCnpj(client.cnpj);
+      }
       setRamoAtividade(client.ramo_atividade || "");
       setCidade(client.cidade || "");
       setEstado(client.estado || "");
+
+      if (clienteTemCadastroCnpj(client)) {
+        setLookupInfo("Dados carregados do cadastro salvo da empresa.");
+      }
     }
   }, [client]);
 
-  const applyExtractedData = (extracted: {
-    empresa?: string;
-    cnpj?: string;
-    email?: string;
-    telefone?: string;
-    cidade?: string;
-    estado?: string;
-    ramo_atividade?: string;
-    nome?: string;
-  }) => {
-    if (extracted.empresa) setEmpresaNome(extracted.empresa);
-    if (extracted.cnpj) setCnpj(extracted.cnpj);
-    if (extracted.email) setEmailCorporativo(extracted.email);
-    if (extracted.telefone) setTelefonePrincipal(extracted.telefone);
-    if (extracted.cidade) setCidade(extracted.cidade);
-    if (extracted.estado) setEstado(extracted.estado.slice(0, 2).toUpperCase());
-    if (extracted.ramo_atividade) setRamoAtividade(extracted.ramo_atividade);
-    if (extracted.nome) setResponsavelLegal(extracted.nome);
+  const applyCnpjData = (data: CnpjFormData) => {
+    if (data.empresa) setEmpresaNome(data.empresa);
+    if (data.cnpj) setCnpj(formatCnpjInput(data.cnpj));
+    if (data.email) setEmailCorporativo(data.email);
+    if (data.telefone) setTelefonePrincipal(data.telefone);
+    if (data.cidade) setCidade(data.cidade);
+    if (data.estado) setEstado(data.estado.slice(0, 2).toUpperCase());
+    if (data.ramo_atividade) setRamoAtividade(data.ramo_atividade);
+    if (data.nome) setResponsavelLegal(data.nome);
   };
 
-  const isCartaoFileAllowed = (file: File) => {
-    const allowedTypes = [
-      "application/pdf",
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/webp",
-    ];
-    if (allowedTypes.includes(file.type)) return true;
-
-    const name = file.name.toLowerCase();
-    return /\.(pdf|jpe?g|png|webp)$/.test(name);
+  const applyClienteCadastro = (cadastro: Cliente) => {
+    if (cadastro.empresa) setEmpresaNome(cadastro.empresa);
+    if (cadastro.cnpj) setCnpj(formatCnpjInput(cadastro.cnpj));
+    if (cadastro.email) setEmailCorporativo(cadastro.email);
+    if (cadastro.telefone) setTelefonePrincipal(cadastro.telefone);
+    if (cadastro.cidade) setCidade(cadastro.cidade);
+    if (cadastro.estado) setEstado(cadastro.estado);
+    if (cadastro.ramo_atividade) setRamoAtividade(cadastro.ramo_atividade);
+    if (cadastro.nome) setResponsavelLegal(cadastro.nome);
   };
 
-  const isPdfFile = (file: File) =>
-    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const lookupCnpj = useCallback(
+    async (value: string) => {
+      const digits = stripCnpj(value);
 
-  const handleCartaoSocialUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+      if (!isCnpjComplete(digits)) return;
+      if (lastLookupRef.current === digits) return;
 
-    if (!isCartaoFileAllowed(file)) {
-      setExtractError("Envie um PDF do cartão CNPJ (recomendado) ou imagem (JPG, PNG, WEBP).");
+      if (client && clienteTemCadastroCnpj(client, digits)) {
+        lastLookupRef.current = digits;
+        applyClienteCadastro(client);
+        setLookupError(null);
+        setLookupInfo("Dados carregados do cadastro salvo da empresa.");
+        return;
+      }
+
+      setLookupError(null);
+      setLookupInfo(null);
+      setIsLookingUp(true);
+
+      try {
+        const result = await dbService.lookupCnpj(digits);
+        lastLookupRef.current = digits;
+        applyCnpjData(result);
+
+        await dbService.savePublicPropostaClienteDados(
+          id,
+          buildClienteDadosFromCnpjLookup(result)
+        );
+        queryClient.invalidateQueries({ queryKey: ["public-proposta", id] });
+
+        if (result.situacao_cadastral) {
+          setLookupInfo(
+            `Dados carregados e salvos. Situação cadastral: ${result.situacao_cadastral}.`
+          );
+        } else {
+          setLookupInfo("Dados da empresa carregados e salvos no cadastro.");
+        }
+      } catch (err) {
+        lastLookupRef.current = "";
+        setLookupError(
+          err instanceof Error ? err.message : "Não foi possível consultar o CNPJ."
+        );
+      } finally {
+        setIsLookingUp(false);
+      }
+    },
+    [client, id, queryClient]
+  );
+
+  const handleCnpjChange = (value: string) => {
+    const formatted = formatCnpjInput(value);
+    setCnpj(formatted);
+    setLookupError(null);
+    setLookupInfo(null);
+
+    const digits = stripCnpj(formatted);
+    if (digits.length < 14) {
+      lastLookupRef.current = "";
       return;
     }
 
-    setExtractError(null);
-    setIsExtracting(true);
-
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Falha ao ler o arquivo"));
-        reader.readAsDataURL(file);
-      });
-
-      setCartaoPreview({
-        type: isPdfFile(file) ? "pdf" : "image",
-        src: dataUrl,
-        name: file.name,
-      });
-
-      const extracted = await dbService.extractCartaoSocial(dataUrl);
-      applyExtractedData(extracted);
-    } catch (err) {
-      setExtractError(
-        err instanceof Error ? err.message : "Não foi possível extrair os dados do documento."
-      );
-    } finally {
-      setIsExtracting(false);
-    }
+    lookupCnpj(formatted);
   };
 
   const acceptMutation = useMutation({
@@ -212,63 +245,54 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
             CONCLUIR <em style={{ color: "var(--prop-gray-500)", fontStyle: "normal" }}>CADASTRO</em>
           </h1>
           <p className="prop-form-desc">
-            Anexe o cartão CNPJ em PDF para preenchimento automático via IA, ou complete os dados
-            manualmente para gerar o contrato oficial.
+            Informe o CNPJ da empresa para buscar os dados automaticamente e confirme as
+            informações antes de aceitar a proposta.
           </p>
 
           <form onSubmit={handleSubmit}>
-            <div className="prop-upload-zone">
-              <label htmlFor="cartaoSocial" className="prop-upload-label">
-                Cartão CNPJ / documento da empresa
+            <div className="prop-cnpj-lookup">
+              <label htmlFor="cnpj" className="prop-field-label">
+                CNPJ da empresa *
               </label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>
-                <label htmlFor="cartaoSocial" className="prop-upload-btn">
-                  Anexar PDF ou imagem
-                </label>
-                <input
-                  id="cartaoSocial"
-                  type="file"
-                  accept="application/pdf,image/jpeg,image/png,image/webp,.pdf"
-                  hidden
-                  onChange={handleCartaoSocialUpload}
-                  disabled={isExtracting}
-                />
-                {cartaoPreview?.type === "image" && (
-                  <img
-                    src={cartaoPreview.src}
-                    alt="Documento anexado"
-                    style={{
-                      height: 80,
-                      border: "1px solid var(--prop-line)",
-                      objectFit: "contain",
-                      background: "#fff",
-                    }}
-                  />
-                )}
-                {cartaoPreview?.type === "pdf" && (
-                  <div className="prop-upload-preview-pdf">
-                    <span>PDF</span>
-                    {cartaoPreview.name}
-                  </div>
-                )}
-              </div>
+              <input
+                id="cnpj"
+                required
+                value={cnpj}
+                onChange={(e) => handleCnpjChange(e.target.value)}
+                placeholder="00.000.000/0001-00"
+                className="prop-input"
+                inputMode="numeric"
+                autoComplete="off"
+              />
               <p className="prop-upload-hint">
-                Formato recomendado: PDF do cartão CNPJ. A IA extrai os dados e preenche os campos
-                abaixo automaticamente.
+                Ao completar os 14 dígitos, os dados são carregados automaticamente. Se a empresa
+                já foi consultada antes, usamos o cadastro salvo sem nova consulta na{" "}
+                <a
+                  href="https://brasilapi.com.br/docs#tag/CNPJ"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "var(--prop-blue)" }}
+                >
+                  Brasil API
+                </a>
+                .
               </p>
-              {isExtracting && (
+              {isLookingUp && (
                 <div className="prop-extracting-status" role="status" aria-live="polite">
                   <div className="prop-spinner" aria-hidden="true" />
                   <div className="prop-extracting-text">
-                    <strong>Extraindo dados</strong>
-                    A IA está lendo o documento e preenchendo os campos abaixo...
+                    <strong>Consultando CNPJ</strong>
+                    Buscando razão social, endereço e demais dados da empresa...
                   </div>
                 </div>
               )}
-              {extractError && <p className="prop-error-text">{extractError}</p>}
+              {lookupInfo && !isLookingUp ? (
+                <p className="prop-success-text">{lookupInfo}</p>
+              ) : null}
+              {lookupError && <p className="prop-error-text">{lookupError}</p>}
             </div>
 
-            <div className={`prop-form-grid${isExtracting ? " is-extracting" : ""}`}>
+            <div className={`prop-form-grid${isLookingUp ? " is-extracting" : ""}`}>
               <div className="prop-field">
                 <label htmlFor="empresaNome" className="prop-field-label">
                   Nome da empresa *
@@ -279,19 +303,6 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
                   value={empresaNome}
                   onChange={(e) => setEmpresaNome(e.target.value)}
                   placeholder="Empresa Exemplo LTDA"
-                  className="prop-input"
-                />
-              </div>
-              <div className="prop-field">
-                <label htmlFor="cnpj" className="prop-field-label">
-                  CNPJ *
-                </label>
-                <input
-                  id="cnpj"
-                  required
-                  value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
-                  placeholder="00.000.000/0001-00"
                   className="prop-input"
                 />
               </div>
@@ -380,7 +391,7 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
             <div className="prop-form-actions">
               <button
                 type="submit"
-                disabled={acceptMutation.isPending || isExtracting}
+                disabled={acceptMutation.isPending || isLookingUp}
                 className="prop-btn prop-btn-blue"
                 style={{ width: "100%", justifyContent: "center" }}
               >
