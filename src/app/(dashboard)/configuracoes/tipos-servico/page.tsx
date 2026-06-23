@@ -21,12 +21,38 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Edit2, Layers } from "lucide-react";
+import { Plus, Trash2, Edit2, Layers, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  formatOperandosText,
+  parseOperandosText,
+  type CampoCalculo,
+} from "@/lib/campo-calculado";
 
-type CampoDraft = Omit<TipoServicoCampo, "id" | "tipo_servico_id">;
+type CampoCalculoDraft = CampoCalculo & { operandosText?: string };
+
+type CampoDraft = Omit<TipoServicoCampo, "id" | "tipo_servico_id" | "calculo"> & {
+  calculo: CampoCalculoDraft | null;
+};
+type CampoDraftRow = CampoDraft & { draftId: string };
 type EntregavelDraft = Omit<TipoServicoEntregavel, "id" | "tipo_servico_id">;
 
-const emptyCampo = (): CampoDraft => ({
+function createDraftId() {
+  return globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}-${Math.random()}`;
+}
+
+function reorderCampos(
+  campos: CampoDraftRow[],
+  fromIndex: number,
+  toIndex: number
+): CampoDraftRow[] {
+  const next = [...campos];
+  const [moved] = next.splice(fromIndex, 1);
+  if (!moved) return campos;
+  next.splice(toIndex, 0, moved);
+  return next.map((campo, index) => ({ ...campo, ordem: index }));
+}
+
+const emptyCampo = (): CampoDraftRow => ({
   chave: "",
   label: "",
   tipo_campo: "currency",
@@ -34,6 +60,7 @@ const emptyCampo = (): CampoDraft => ({
   obrigatorio: true,
   placeholder: "",
   calculo: null,
+  draftId: createDraftId(),
 });
 
 const emptyEntregavel = (): EntregavelDraft => ({
@@ -48,8 +75,24 @@ export default function TiposServicoPage() {
   const [editing, setEditing] = useState<TipoServico | null>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [campos, setCampos] = useState<CampoDraft[]>([emptyCampo()]);
+  const [campos, setCampos] = useState<CampoDraftRow[]>([emptyCampo()]);
   const [entregaveis, setEntregaveis] = useState<EntregavelDraft[]>([]);
+
+  const patchCampo = (draftId: string, patch: Partial<CampoDraft>) => {
+    setCampos((current) =>
+      current.map((c) => (c.draftId === draftId ? { ...c, ...patch } : c))
+    );
+  };
+
+  const moveCampo = (draftId: string, direction: -1 | 1) => {
+    setCampos((current) => {
+      const index = current.findIndex((c) => c.draftId === draftId);
+      if (index < 0) return current;
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      return reorderCampos(current, index, target);
+    });
+  };
 
   const { data: tipos = [], isLoading } = useQuery({
     queryKey: ["tipos-servico"],
@@ -61,7 +104,20 @@ export default function TiposServicoPage() {
       const payload = {
         nome,
         descricao,
-        campos: campos.filter((c) => c.chave.trim() && c.label.trim()),
+        campos: campos
+          .filter((c) => c.chave.trim() && c.label.trim())
+          .map(({ draftId: _draftId, calculo, ...c }, idx) => ({
+            ...c,
+            ordem: idx,
+            calculo: calculo
+              ? {
+                  operacao: calculo.operacao,
+                  operandos: parseOperandosText(
+                    calculo.operandosText ?? formatOperandosText(calculo.operandos)
+                  ),
+                }
+              : null,
+          })),
         entregaveis: entregaveis.filter((e) => e.nome.trim()),
       };
       if (editing) return dbService.updateTipoServico(editing.id, payload);
@@ -93,17 +149,19 @@ export default function TiposServicoPage() {
     setDescricao(tipo.descricao);
     setCampos(
       tipo.campos?.length
-        ? tipo.campos.map(
-            ({ chave, label, tipo_campo, ordem, obrigatorio, placeholder, calculo }) => ({
-              chave,
-              label,
-              tipo_campo,
-              ordem,
-              obrigatorio,
-              placeholder,
-              calculo: calculo ?? null,
-            })
-          )
+        ? [...tipo.campos]
+            .sort((a, b) => a.ordem - b.ordem)
+            .map(({ id, tipo_servico_id: _tipoServicoId, ...campo }, index) => ({
+              ...campo,
+              calculo: campo.calculo
+                ? {
+                    ...campo.calculo,
+                    operandosText: formatOperandosText(campo.calculo.operandos),
+                  }
+                : null,
+              ordem: index,
+              draftId: id,
+            }))
         : [emptyCampo()]
     );
     setEntregaveis(
@@ -205,30 +263,62 @@ export default function TiposServicoPage() {
             </div>
 
             <div className="border-t border-zinc-800 pt-4">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-semibold">Campos do tipo</h3>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setCampos([...campos, { ...emptyCampo(), ordem: campos.length }])}
+                  onClick={() =>
+                    setCampos((current) => [
+                      ...current,
+                      { ...emptyCampo(), ordem: current.length },
+                    ])
+                  }
                 >
                   + Campo
                 </Button>
               </div>
+              <p className="text-xs text-zinc-500 mb-3">
+                Use as setas para alterar a ordem dos campos na proposta.
+              </p>
               <div className="grid gap-2">
                 {campos.map((campo, idx) => (
-                  <div key={idx} className="p-2 rounded bg-zinc-950 border border-zinc-800 space-y-2">
+                  <div
+                    key={campo.draftId}
+                    className="p-2 rounded bg-zinc-950 border border-zinc-800 space-y-2"
+                  >
                     <div className="grid grid-cols-12 gap-2 items-end">
+                      <div className="col-span-1 flex flex-col items-center gap-0.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-zinc-400 hover:text-white"
+                          disabled={idx === 0}
+                          onClick={() => moveCampo(campo.draftId, -1)}
+                          aria-label="Mover campo para cima"
+                        >
+                          <ChevronUp className="size-4" />
+                        </Button>
+                        <span className="text-[10px] text-zinc-500 font-medium">{idx + 1}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-zinc-400 hover:text-white"
+                          disabled={idx === campos.length - 1}
+                          onClick={() => moveCampo(campo.draftId, 1)}
+                          aria-label="Mover campo para baixo"
+                        >
+                          <ChevronDown className="size-4" />
+                        </Button>
+                      </div>
                       <div className="col-span-2">
                         <Label className="text-xs text-zinc-300">Chave</Label>
                         <Input
                           value={campo.chave}
-                          onChange={(e) => {
-                            const next = [...campos];
-                            next[idx] = { ...campo, chave: e.target.value };
-                            setCampos(next);
-                          }}
+                          onChange={(e) => patchCampo(campo.draftId, { chave: e.target.value })}
                           placeholder="valor_total"
                           className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                         />
@@ -237,11 +327,7 @@ export default function TiposServicoPage() {
                         <Label className="text-xs text-zinc-300">Label</Label>
                         <Input
                           value={campo.label}
-                          onChange={(e) => {
-                            const next = [...campos];
-                            next[idx] = { ...campo, label: e.target.value };
-                            setCampos(next);
-                          }}
+                          onChange={(e) => patchCampo(campo.draftId, { label: e.target.value })}
                           placeholder="Valor total"
                           className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                         />
@@ -252,20 +338,14 @@ export default function TiposServicoPage() {
                           value={campo.tipo_campo}
                           onValueChange={(v) => {
                             if (!v) return;
-                            const next = [...campos];
-                            next[idx] = {
-                              ...campo,
+                            patchCampo(campo.draftId, {
                               tipo_campo: v as CampoDraft["tipo_campo"],
                               obrigatorio: v === "calculated" ? false : campo.obrigatorio,
                               calculo:
                                 v === "calculated"
-                                  ? campo.calculo ?? {
-                                      operacao: "multiply",
-                                      operandos: [],
-                                    }
+                                  ? campo.calculo ?? { operacao: "multiply", operandos: [] }
                                   : null,
-                            };
-                            setCampos(next);
+                            });
                           }}
                         >
                           <SelectTrigger className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100">
@@ -280,17 +360,15 @@ export default function TiposServicoPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="col-span-4">
+                      <div className="col-span-3">
                         {campo.tipo_campo !== "calculated" ? (
                           <>
                             <Label className="text-xs text-zinc-300">Placeholder</Label>
                             <Input
                               value={campo.placeholder}
-                              onChange={(e) => {
-                                const next = [...campos];
-                                next[idx] = { ...campo, placeholder: e.target.value };
-                                setCampos(next);
-                              }}
+                              onChange={(e) =>
+                                patchCampo(campo.draftId, { placeholder: e.target.value })
+                              }
                               className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100"
                             />
                           </>
@@ -306,7 +384,13 @@ export default function TiposServicoPage() {
                           variant="ghost"
                           size="sm"
                           className="text-rose-400"
-                          onClick={() => setCampos(campos.filter((_, i) => i !== idx))}
+                          onClick={() =>
+                            setCampos((current) =>
+                              current
+                                .filter((c) => c.draftId !== campo.draftId)
+                                .map((c, index) => ({ ...c, ordem: index }))
+                            )
+                          }
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
@@ -314,22 +398,21 @@ export default function TiposServicoPage() {
                     </div>
 
                     {campo.tipo_campo === "calculated" && (
-                      <div className="grid grid-cols-12 gap-2 items-end pl-1">
-                        <div className="col-span-3">
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-1" aria-hidden />
+                        <div className="col-span-2">
                           <Label className="text-xs text-zinc-300">Operação</Label>
                           <Select
                             value={campo.calculo?.operacao ?? "multiply"}
                             onValueChange={(v) => {
                               if (!v) return;
-                              const next = [...campos];
-                              next[idx] = {
-                                ...campo,
+                              patchCampo(campo.draftId, {
                                 calculo: {
-                                  operacao: v as "multiply" | "add",
+                                  operacao: v as "multiply" | "add" | "divide",
                                   operandos: campo.calculo?.operandos ?? [],
+                                  operandosText: campo.calculo?.operandosText,
                                 },
-                              };
-                              setCampos(next);
+                              });
                             }}
                           >
                             <SelectTrigger className="bg-zinc-900 border-zinc-800 h-9 text-sm text-zinc-100">
@@ -338,34 +421,40 @@ export default function TiposServicoPage() {
                             <SelectContent className="bg-zinc-900 border-zinc-800">
                               <SelectItem value="multiply">Multiplicar (A × B)</SelectItem>
                               <SelectItem value="add">Somar (A + B + …)</SelectItem>
+                              <SelectItem value="divide">Dividir (A ÷ B)</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="col-span-8">
                           <Label className="text-xs text-zinc-300">
-                            Campos operandos (chaves separadas por vírgula)
+                            {campo.calculo?.operacao === "divide"
+                              ? "Operandos (dividendo, divisor)"
+                              : "Campos operandos (chaves separadas por vírgula)"}
                           </Label>
                           <Input
-                            value={(campo.calculo?.operandos ?? []).join(", ")}
+                            value={
+                              campo.calculo?.operandosText ??
+                              formatOperandosText(campo.calculo?.operandos ?? [])
+                            }
                             onChange={(e) => {
-                              const operandos = e.target.value
-                                .split(",")
-                                .map((s) => s.trim())
-                                .filter(Boolean);
-                              const next = [...campos];
-                              next[idx] = {
-                                ...campo,
+                              const operandosText = e.target.value;
+                              patchCampo(campo.draftId, {
                                 calculo: {
                                   operacao: campo.calculo?.operacao ?? "multiply",
-                                  operandos,
+                                  operandos: parseOperandosText(operandosText),
+                                  operandosText,
                                 },
-                              };
-                              setCampos(next);
+                              });
                             }}
-                            placeholder="numero_parcelas, valor_parcela"
+                            placeholder={
+                              campo.calculo?.operacao === "divide"
+                                ? "valor_total, numero_parcelas"
+                                : "numero_parcelas, valor_parcela"
+                            }
                             className="bg-zinc-900 border-zinc-800 h-8 text-xs font-mono"
                           />
                         </div>
+                        <div className="col-span-1" aria-hidden />
                       </div>
                     )}
                   </div>

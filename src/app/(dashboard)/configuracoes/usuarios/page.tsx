@@ -32,10 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ClientDate } from "@/components/client-date";
-import { Mail, Plus, UserCog, RefreshCw } from "lucide-react";
+import { Mail, Plus, UserCog, RefreshCw, Trash2 } from "lucide-react";
+import { useAuthUser } from "@/hooks/use-auth";
 
 export default function UsuariosPage() {
   const queryClient = useQueryClient();
+  const authUser = useAuthUser();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<UsuarioProfile | null>(null);
   const [fullName, setFullName] = useState("");
@@ -90,6 +92,32 @@ export default function UsuariosPage() {
     },
     onError: (e) => alert(e instanceof Error ? e.message : "Erro ao reenviar"),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: dbService.deleteUsuario,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["usuarios"] });
+      alert(data.message);
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Erro ao excluir"),
+  });
+
+  const handleDeleteUsuario = (usuario: UsuarioProfile) => {
+    if (usuario.id === authUser?.id) {
+      alert("Você não pode excluir o próprio usuário.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Excluir permanentemente o usuário ${usuario.full_name ?? usuario.email}?\n\nEsta ação remove o acesso e não pode ser desfeita.`
+      )
+    ) {
+      return;
+    }
+
+    deleteMutation.mutate(usuario.id);
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -215,6 +243,18 @@ export default function UsuariosPage() {
                         >
                           {u.ativo ? "Desativar" : "Ativar"}
                         </Button>
+                        {u.id !== authUser?.id && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-rose-500 hover:text-rose-400 h-7 text-xs"
+                            disabled={deleteMutation.isPending}
+                            onClick={() => handleDeleteUsuario(u)}
+                          >
+                            <Trash2 className="size-3 mr-1" />
+                            Excluir
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

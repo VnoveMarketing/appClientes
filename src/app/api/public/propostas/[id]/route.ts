@@ -9,18 +9,21 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   try {
     const supabase = getAdminSupabase();
-    const { data, error } = await supabase
+
+    const { data: proposta, error: propostaError } = await supabase
       .from("propostas")
-      .select("*, clientes(*)")
+      .select("*")
       .eq("id", id)
       .maybeSingle();
 
-    if (error) return errorResponse(error.message, 500);
-    if (!data) return errorResponse("Proposta não encontrada", 404);
+    if (propostaError) return errorResponse(propostaError.message, 500);
+    if (!proposta) return errorResponse("Proposta não encontrada", 404);
 
-    const { clientes, ...proposta } = data as Record<string, unknown> & {
-      clientes: Record<string, unknown> | null;
-    };
+    const { data: clientes } = await supabase
+      .from("clientes")
+      .select("*")
+      .eq("id", proposta.cliente_id)
+      .maybeSingle();
 
     let cases: unknown[] = [];
     const categoriaCaseId = clientes?.categoria_case_id as string | null | undefined;
@@ -36,7 +39,28 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       cases = casesData ?? [];
     }
 
-    return jsonResponse({ proposta, cliente: clientes, cases });
+    let tipoServico: Record<string, unknown> | null = null;
+    const tipoServicoId = proposta.tipo_servico_id as string | null | undefined;
+
+    if (tipoServicoId) {
+      const { data: tipo } = await supabase
+        .from("tipos_servico")
+        .select("id, nome, descricao")
+        .eq("id", tipoServicoId)
+        .maybeSingle();
+
+      if (tipo) {
+        const { data: tipoCampos } = await supabase
+          .from("tipo_servico_campos")
+          .select("*")
+          .eq("tipo_servico_id", tipoServicoId)
+          .order("ordem");
+
+        tipoServico = { ...tipo, campos: tipoCampos ?? [] };
+      }
+    }
+
+    return jsonResponse({ proposta, cliente: clientes ?? null, cases, tipo_servico: tipoServico });
   } catch (e) {
     return errorResponse(e instanceof Error ? e.message : "Erro interno", 500);
   }

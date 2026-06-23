@@ -118,7 +118,7 @@ export default function ClientesPage() {
     },
   });
 
-  const openAddModal = () => {
+  const resetFormFields = () => {
     setSelectedCliente(null);
     setNome("");
     setSobrenome("");
@@ -131,6 +131,10 @@ export default function ClientesPage() {
     setLogoPreview(null);
     setHeroFile(null);
     setHeroPreview(null);
+  };
+
+  const openAddModal = () => {
+    resetFormFields();
     setIsModalOpen(true);
   };
 
@@ -188,8 +192,12 @@ export default function ClientesPage() {
         if (heroFile) {
           await dbService.uploadClienteHeroImage(created.id, heroFile);
         }
+        await queryClient.invalidateQueries({ queryKey: ["clientes"] });
+        resetFormFields();
+        closeModal();
+        return;
       }
-      queryClient.invalidateQueries({ queryKey: ["clientes"] });
+      await queryClient.invalidateQueries({ queryKey: ["clientes"] });
       closeModal();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Erro ao salvar cliente");
@@ -687,11 +695,13 @@ export default function ClientesPage() {
                 className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-medium rounded-lg"
                 disabled={addMutation.isPending || updateMutation.isPending}
               >
-                {addMutation.isPending || updateMutation.isPending
+                {addMutation.isPending
+                  ? "Cadastrando..."
+                  : updateMutation.isPending
                   ? "Salvando..."
                   : selectedCliente
                   ? "Salvar Alterações"
-                  : "Avançar"}
+                  : "Cadastrar cliente"}
               </Button>
             </DialogFooter>
           </form>

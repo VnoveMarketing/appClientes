@@ -1,5 +1,72 @@
 type CamposValores = Record<string, string | number | null | undefined>;
 
+export const SETUP_DESCRICAO_CHAVE = "setup_descricao";
+
+export type ValorInicialAlvo = "setup" | "valor_total";
+
+export function tipoServicoTemCampoSetup(campos?: { chave: string }[]) {
+  return (campos ?? []).some((c) => c.chave === "setup");
+}
+
+export function tipoServicoTemCampoValorTotal(campos?: { chave: string }[]) {
+  return (campos ?? []).some((c) => c.chave === "valor_total");
+}
+
+export function getDescontoInicialLabel(campos?: { chave: string }[]) {
+  if (tipoServicoTemCampoSetup(campos)) return "Desconto no setup (%)";
+  if (tipoServicoTemCampoValorTotal(campos)) return "Desconto no valor total (%)";
+  return "Desconto no valor inicial (%)";
+}
+
+/** Valor único ao qual se aplica desconto_setup: campo setup ou valor_total (conforme o tipo). */
+export function resolveValorInicialBruto(
+  camposValores: CamposValores,
+  campos?: { chave: string }[],
+  legacy?: { setup?: number; valor_total?: number }
+): { valor: number; alvo: ValorInicialAlvo | null } {
+  if (tipoServicoTemCampoSetup(campos)) {
+    const valor = Number(camposValores.setup ?? legacy?.setup ?? 0);
+    return { valor: Number.isFinite(valor) ? valor : 0, alvo: "setup" };
+  }
+
+  if (tipoServicoTemCampoValorTotal(campos)) {
+    const valor = Number(camposValores.valor_total ?? legacy?.valor_total ?? 0);
+    return { valor: Number.isFinite(valor) ? valor : 0, alvo: "valor_total" };
+  }
+
+  const setupLegacy = Number(legacy?.setup ?? camposValores.setup ?? 0);
+  if (setupLegacy > 0) {
+    return { valor: setupLegacy, alvo: "setup" };
+  }
+
+  const valorTotal = Number(camposValores.valor_total ?? legacy?.valor_total ?? 0);
+  if (valorTotal > 0) {
+    return { valor: valorTotal, alvo: "valor_total" };
+  }
+
+  return { valor: 0, alvo: null };
+}
+
+export function resolveValorInicialComDesconto(
+  camposValores: CamposValores,
+  descontoSetup: number,
+  campos?: { chave: string }[],
+  legacy?: { setup?: number; valor_total?: number }
+) {
+  const { valor, alvo } = resolveValorInicialBruto(camposValores, campos, legacy);
+  return {
+    valorBruto: valor,
+    valorFinal: valor - (valor * descontoSetup) / 100,
+    alvo,
+  };
+}
+
+export function getSetupDescricao(camposValores?: CamposValores | null): string {
+  const raw = camposValores?.[SETUP_DESCRICAO_CHAVE];
+  if (raw === null || raw === undefined) return "";
+  return String(raw).trim();
+}
+
 export function syncLegacyFinancialFields(
   camposValores: CamposValores,
   overrides?: {
@@ -27,7 +94,13 @@ export function syncLegacyFinancialFields(
 
 export function formatCamposForDisplay(camposValores: CamposValores, labels: Record<string, string>) {
   return Object.entries(camposValores)
-    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .filter(
+      ([chave, value]) =>
+        chave !== SETUP_DESCRICAO_CHAVE &&
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+    )
     .map(([chave, value]) => {
       const label = labels[chave] ?? chave;
       const formatted =

@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/client";
 import type { UserRole } from "@/lib/api/auth";
 
 export type AuthUser = {
+  id?: string;
   name: string;
   email: string;
   avatar: string;
@@ -22,6 +23,7 @@ export function useAuthUser() {
       .then((data) => {
         if (data?.email) {
           setUser({
+            id: data.id,
             name: data.name ?? "Usuário",
             email: data.email,
             avatar: "",

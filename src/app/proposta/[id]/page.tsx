@@ -7,6 +7,72 @@ import { normalizeEscopo } from "@/lib/escopo";
 import Link from "next/link";
 import { AgencyLogo } from "@/components/agency-brand";
 import type { CasePortfolio } from "@/lib/types";
+import {
+  buildPropostaInvestimento,
+  formatCurrency,
+  type PropostaInvestCard,
+} from "@/lib/proposta-investimento";
+import { getPropostaIdentificadorDisplay } from "@/lib/proposta-identificador";
+
+function PropostaInvestPrice({
+  card,
+  highlighted = false,
+}: {
+  card: PropostaInvestCard;
+  highlighted?: boolean;
+}) {
+  if (card.isExempt) {
+    return (
+      <div>
+        {card.originalAmount !== undefined && (
+          <div className="prop-invest-price strike">{formatCurrency(card.originalAmount)}</div>
+        )}
+        <div className="prop-invest-price highlight">ISENTO</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {card.originalAmount !== undefined && (card.discountPct ?? 0) > 0 && (
+        <div className="prop-invest-price strike">{formatCurrency(card.originalAmount)}</div>
+      )}
+      <div className={`prop-invest-price${highlighted ? " highlight" : ""}`}>
+        {formatCurrency(card.amount)}
+        {card.suffix ? (
+          <span style={{ fontSize: 16, color: "var(--prop-gray-500)", marginLeft: 6 }}>
+            {card.suffix}
+          </span>
+        ) : null}
+      </div>
+      {(card.discountPct ?? 0) > 0 && (
+        <span className="prop-discount-tag">{card.discountPct}% desconto</span>
+      )}
+    </div>
+  );
+}
+
+function PropostaInvestCardBlock({
+  card,
+  featured = false,
+  tag,
+}: {
+  card: PropostaInvestCard;
+  featured?: boolean;
+  tag?: string;
+}) {
+  return (
+    <div className={`prop-invest-card${featured ? " featured" : ""}`}>
+      {tag ? <span className="prop-invest-tag">{tag}</span> : null}
+      <div>
+        <div className="prop-invest-label">{card.label}</div>
+        <div className="prop-invest-name">{card.title}</div>
+        {card.detail ? <p className="prop-invest-detail">{card.detail}</p> : null}
+      </div>
+      <PropostaInvestPrice card={card} highlighted={featured} />
+    </div>
+  );
+}
 
 const BASE_SECTIONS = [
   { id: "sobre", label: "Agência", showWhenCases: false },
@@ -27,6 +93,7 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
 
   const proposta = data?.proposta;
   const client = data?.cliente;
+  const tipoServico = data?.tipo_servico ?? null;
   const portfolioCases = (data?.cases ?? []) as CasePortfolio[];
 
   const navSections = BASE_SECTIONS.filter(
@@ -79,23 +146,18 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
   const clientName = client ? client.empresa : "Empresa Cliente";
   const escopoItems = normalizeEscopo(proposta.escopo);
   const isPendente = proposta.status === "pendente" || proposta.status === "em_analise";
-
-  const formatBRL = (val: number) =>
-    val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-  const calcDiscount = (val: number, pct: number) => val - (val * pct) / 100;
-
-  const finalSetup = calcDiscount(proposta.setup, proposta.desconto_setup);
-  const finalMensal = calcDiscount(proposta.mensalidade, proposta.desconto_mensalidade);
+  const investimento = buildPropostaInvestimento(proposta, tipoServico);
+  const resumoRows = [
+    ...investimento.resumo,
+    { key: "Cliente", value: clientName },
+  ];
 
   const createdDate = new Date(proposta.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
     year: "numeric",
   });
-
-  const duracaoLabel =
-    proposta.duracao === 0 ? "Prazo indeterminado" : `${proposta.duracao} meses`;
+  const propostaIdentificador = getPropostaIdentificadorDisplay(proposta);
 
   const hasHeroImage = Boolean(client?.hero_image_url);
 
@@ -125,11 +187,14 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
         ) : null}
         <div className="prop-hero-inner prop-hero-split">
           <div className="prop-hero-content">
-            <div className="prop-kicker">Proposta Comercial · Agência Vnove</div>
+            <div className="prop-hero-meta">
+              <div className="prop-kicker">Proposta Comercial · Agência Vnove</div>
+            </div>
             <h1 className="prop-hero-title">
               PROPOSTA<br />
               <em>COMERCIAL</em>
             </h1>
+            <span className="prop-proposta-id">{propostaIdentificador}</span>
             <div className="prop-hero-client">{clientName}</div>
             <p className="prop-hero-desc">
               Solução completa de <strong>marketing digital e CRM</strong> para estruturar,
@@ -345,83 +410,34 @@ export default function PropostaPublicPage({ params }: { params: Promise<{ id: s
             proposta comercial.
           </p>
 
-          <div className="prop-invest-grid">
-            <div className="prop-invest-card">
-              <div>
-                <div className="prop-invest-label">Etapa de implantação</div>
-                <div className="prop-invest-name">Setup e Configurações</div>
-                <p className="prop-invest-detail">
-                  Onboarding, criação de canais, parametrização e treinamento de equipe.
-                </p>
-              </div>
-              <div>
-                {proposta.desconto_setup === 100 ? (
-                  <>
-                    <div className="prop-invest-price strike">{formatBRL(proposta.setup)}</div>
-                    <div className="prop-invest-price highlight">ISENTO</div>
-                  </>
-                ) : (
-                  <>
-                    {proposta.desconto_setup > 0 && (
-                      <div className="prop-invest-price strike">{formatBRL(proposta.setup)}</div>
-                    )}
-                    <div className="prop-invest-price">{formatBRL(finalSetup)}</div>
-                    {proposta.desconto_setup > 0 && (
-                      <span className="prop-discount-tag">{proposta.desconto_setup}% desconto</span>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="prop-invest-card featured">
-              <span className="prop-invest-tag">Fee mensal</span>
-              <div>
-                <div className="prop-invest-label">Recorrência mensal</div>
-                <div className="prop-invest-name">Mensalidade Operacional</div>
-                <p className="prop-invest-detail">
-                  Atuação diária operacional, gerenciamento de mídias e acompanhamento analítico.
-                </p>
-              </div>
-              <div>
-                {proposta.desconto_mensalidade > 0 && (
-                  <div className="prop-invest-price strike">{formatBRL(proposta.mensalidade)}</div>
-                )}
-                <div className="prop-invest-price highlight">
-                  {formatBRL(finalMensal)}
-                  <span style={{ fontSize: 16, color: "var(--prop-gray-500)", marginLeft: 6 }}>
-                    /mês
-                  </span>
-                </div>
-                {proposta.desconto_mensalidade > 0 && (
-                  <span className="prop-discount-tag">
-                    {proposta.desconto_mensalidade}% desconto
-                  </span>
-                )}
-              </div>
-            </div>
+          <div
+            className={`prop-invest-grid${
+              investimento.secondaryCard ? "" : " prop-invest-grid--single"
+            }`}
+          >
+            {investimento.secondaryCard ? (
+              <PropostaInvestCardBlock card={investimento.secondaryCard} />
+            ) : null}
+            <PropostaInvestCardBlock
+              card={investimento.primaryCard}
+              featured
+              tag={investimento.tipoNome}
+            />
           </div>
 
           <div className="prop-format" style={{ marginTop: 48 }}>
             <div className="prop-format-label">Resumo do contrato</div>
-            <div className="prop-fmt-row">
-              <span className="prop-fmt-key">Setup final</span>
-              <span className="prop-fmt-val">
-                {proposta.desconto_setup === 100 ? "Isento" : formatBRL(finalSetup)}
-              </span>
-            </div>
-            <div className="prop-fmt-row">
-              <span className="prop-fmt-key">Mensalidade</span>
-              <span className="prop-fmt-val">{formatBRL(finalMensal)}</span>
-            </div>
-            <div className="prop-fmt-row">
-              <span className="prop-fmt-key">Duração</span>
-              <span className="prop-fmt-val">{duracaoLabel}</span>
-            </div>
-            <div className="prop-fmt-row">
-              <span className="prop-fmt-key">Cliente</span>
-              <span className="prop-fmt-val">{clientName}</span>
-            </div>
+            {resumoRows.map((row) => (
+              <div key={row.key} className="prop-fmt-row">
+                <span className="prop-fmt-key">{row.key}</span>
+                <span className="prop-fmt-val">
+                  {row.value}
+                  {row.valueMuted ? (
+                    <span className="prop-fmt-val-muted">{row.valueMuted}</span>
+                  ) : null}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </section>

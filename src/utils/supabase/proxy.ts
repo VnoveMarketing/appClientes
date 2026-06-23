@@ -39,6 +39,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/configuracoes");
   const isAuthPage = pathname === "/login";
   const isConvitePage = pathname === "/convite";
+  const isRedefinirSenhaPage = pathname === "/redefinir-senha";
 
   if (isProtected && !user) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -47,7 +48,7 @@ export async function updateSession(request: NextRequest) {
   const userId = user?.sub as string | undefined;
   let accessProfile: { role: string; convite_status: string; ativo: boolean } | null = null;
 
-  if (userId && (isProtected || isAuthPage || isConvitePage || pathname === "/")) {
+  if (userId && (isProtected || isAuthPage || isConvitePage || isRedefinirSenhaPage || pathname === "/")) {
     const { data } = await supabase
       .from("profiles")
       .select("role, convite_status, ativo")
@@ -90,6 +91,10 @@ export async function updateSession(request: NextRequest) {
 
   if (isConvitePage && user) {
     await supabase.auth.signOut();
+  }
+
+  if (isRedefinirSenhaPage) {
+    return supabaseResponse;
   }
 
   if (isAuthPage && user) {

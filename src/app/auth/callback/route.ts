@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/clientes";
+  const isPasswordRecovery = next === "/redefinir-senha";
 
   if (code) {
     const cookieStore = await cookies();
@@ -13,6 +14,10 @@ export async function GET(request: Request) {
     const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && sessionData.user) {
+      if (isPasswordRecovery) {
+        return NextResponse.redirect(`${origin}/redefinir-senha`);
+      }
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("convite_status, ativo")
@@ -26,6 +31,10 @@ export async function GET(request: Request) {
 
       return NextResponse.redirect(`${origin}${next}`);
     }
+  }
+
+  if (isPasswordRecovery) {
+    return NextResponse.redirect(`${origin}/redefinir-senha?error=link_invalido`);
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);

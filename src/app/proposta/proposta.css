@@ -271,6 +271,26 @@
   margin-bottom: 28px;
 }
 
+.prop-hero-meta {
+  margin-bottom: 0;
+}
+
+.prop-proposta-id {
+  display: block;
+  font-family: var(--font-barlow-condensed), "Barlow Condensed", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--prop-gray-500);
+  white-space: nowrap;
+  margin-bottom: 28px;
+  margin-left: 3px;
+
+
+
+}
+
 .prop-kicker::before {
   content: "";
   display: block;
@@ -284,7 +304,7 @@
   font-size: clamp(48px, 10vw, 96px);
   line-height: 0.92;
   letter-spacing: 0.015em;
-  margin-bottom: 36px;
+  margin-bottom: 0px;
 }
 
 .prop-hero-title em {
@@ -590,6 +610,10 @@
   margin-top: 48px;
 }
 
+.prop-invest-grid--single {
+  grid-template-columns: 1fr;
+}
+
 .prop-invest-card {
   border: 1px solid var(--prop-line);
   padding: 40px 36px;
@@ -719,6 +743,11 @@
 
 .prop-fmt-val {
   color: var(--prop-gray-100);
+}
+
+.prop-fmt-val-muted {
+  color: var(--prop-gray-500);
+  font-weight: 400;
 }
 
 /* CTA */

@@ -24,6 +24,7 @@ export interface Cliente {
 
 export interface Proposta {
   id: string;
+  identificador?: string | null;
   cliente_id: string;
   setup: number;
   mensalidade: number;

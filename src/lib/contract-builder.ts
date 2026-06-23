@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatEscopoForContract } from "@/lib/escopo";
 import { renderContractTemplate } from "@/lib/contract-template";
+import { resolveValorInicialComDesconto } from "@/lib/proposta-campos";
+import { getPropostaIdentificadorDisplay } from "@/lib/proposta-identificador";
 
 /** Converte sequências literais \\n (comum em templates salvos) em quebras de linha reais. */
 export function normalizeContractText(text: string | null | undefined): string {
@@ -15,11 +17,13 @@ export function normalizeContractText(text: string | null | undefined): string {
 }
 
 export type PropostaForContract = {
+  id?: string;
   setup: number;
   mensalidade: number;
   desconto_setup: number;
   desconto_mensalidade: number;
   duracao: number;
+  identificador?: string | null;
   condicao_descricao?: string | null;
   escopo: unknown;
   escopo_descricao_adicional?: string | null;
@@ -55,7 +59,13 @@ export function buildContractContent(
   }
 ) {
   const discountedSetup =
-    options?.valorSetup ?? calcDiscountedValue(proposta.setup, proposta.desconto_setup);
+    options?.valorSetup ??
+    resolveValorInicialComDesconto(
+      proposta.campos_valores ?? {},
+      proposta.desconto_setup,
+      options?.campos,
+      { setup: proposta.setup }
+    ).valorFinal;
   const discountedMensal =
     options?.valorMensal ??
     calcDiscountedValue(proposta.mensalidade, proposta.desconto_mensalidade);
@@ -107,7 +117,13 @@ export function buildContractContentResolved(
   }
 ) {
   const setup =
-    options?.valorSetup ?? calcDiscountedValue(proposta.setup, proposta.desconto_setup);
+    options?.valorSetup ??
+    resolveValorInicialComDesconto(
+      proposta.campos_valores ?? {},
+      proposta.desconto_setup,
+      options?.campos,
+      { setup: proposta.setup }
+    ).valorFinal;
   const mensal =
     options?.valorMensal ??
     calcDiscountedValue(proposta.mensalidade, proposta.desconto_mensalidade);
@@ -131,6 +147,7 @@ export function buildContractContentResolved(
         desconto_mensalidade: proposta.desconto_mensalidade,
         condicao_descricao: proposta.condicao_descricao,
         tipo_servico: options.tipoServicoNome,
+        id_prop: getPropostaIdentificadorDisplay(proposta),
       })
     );
   }
@@ -169,9 +186,17 @@ export async function buildContractContentFromDb(
   });
 }
 
-export function getContractFinancialValues(proposta: PropostaForContract) {
+export function getContractFinancialValues(
+  proposta: PropostaForContract,
+  campos?: { chave: string }[]
+) {
   return {
-    valor_final_setup: calcDiscountedValue(proposta.setup, proposta.desconto_setup),
+    valor_final_setup: resolveValorInicialComDesconto(
+      proposta.campos_valores ?? {},
+      proposta.desconto_setup,
+      campos,
+      { setup: proposta.setup }
+    ).valorFinal,
     valor_final_mensal: calcDiscountedValue(
       proposta.mensalidade,
       proposta.desconto_mensalidade

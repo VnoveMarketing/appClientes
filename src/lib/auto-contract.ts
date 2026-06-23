@@ -8,6 +8,7 @@ import { hashDocumentContent } from "@/lib/signature-audit";
 
 type PropostaRow = {
   id: string;
+  identificador?: string | null;
   cliente_id: string;
   setup: number;
   mensalidade: number;
@@ -61,7 +62,7 @@ export async function generateContractFromProposta(
     campos = tipoCampos ?? [];
   }
 
-  const { valor_final_setup, valor_final_mensal } = getContractFinancialValues(proposta);
+  const { valor_final_setup, valor_final_mensal } = getContractFinancialValues(proposta, campos);
   const conteudo_contrato = await buildContractContentFromDb(supabase, proposta, cliente, {
     tipoServicoNome,
     campos,

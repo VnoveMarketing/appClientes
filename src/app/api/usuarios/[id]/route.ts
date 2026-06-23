@@ -77,3 +77,36 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   return jsonResponse({ ...rest, tipo_usuario: tipos_usuario });
 }
+
+export async function DELETE(_request: NextRequest, context: RouteContext) {
+  const { id } = await context.params;
+  const auth = await requireAdmin();
+  if ("error" in auth) return auth.error;
+
+  if (id === auth.userId) {
+    return errorResponse("Você não pode excluir o próprio usuário", 400);
+  }
+
+  const admin = getAdminSupabase();
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("id, email")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (profileError) return errorResponse(profileError.message, 500);
+  if (!profile) return errorResponse("Usuário não encontrado", 404);
+
+  const { error: authDeleteError } = await admin.auth.admin.deleteUser(id);
+  if (authDeleteError) {
+    return errorResponse(authDeleteError.message, 500);
+  }
+
+  await admin.from("profiles").delete().eq("id", id);
+
+  return jsonResponse({
+    success: true,
+    message: `Usuário ${profile.email} excluído permanentemente do sistema.`,
+  });
+}

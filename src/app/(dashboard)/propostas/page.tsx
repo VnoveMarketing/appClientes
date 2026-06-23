@@ -6,7 +6,7 @@ import { dbService } from "@/lib/db-service";
 import { Proposta } from "@/lib/types";
 import { normalizeEscopo, type EscopoItemRef } from "@/lib/escopo";
 import { entregaveisToEscopo } from "@/lib/tipos-servico";
-import { syncLegacyFinancialFields } from "@/lib/proposta-campos";
+import { syncLegacyFinancialFields, SETUP_DESCRICAO_CHAVE, tipoServicoTemCampoSetup, getDescontoInicialLabel, resolveValorInicialComDesconto } from "@/lib/proposta-campos";
 import {
   computeCampoCalculado,
   enrichCamposValoresComCalculados,
@@ -136,6 +136,9 @@ export default function PropostasPage() {
     const initialCampos: Record<string, string> = {};
     for (const campo of tipo.campos ?? []) {
       initialCampos[campo.chave] = camposValores[campo.chave] ?? "";
+    }
+    if (tipoServicoTemCampoSetup(tipo.campos)) {
+      initialCampos[SETUP_DESCRICAO_CHAVE] = camposValores[SETUP_DESCRICAO_CHAVE] ?? "";
     }
     setCamposValores(initialCampos);
     setEscopo(entregaveisToEscopo(tipo.entregaveis ?? []));
@@ -352,6 +355,13 @@ export default function PropostasPage() {
               <TableBody>
                 {propostas.map((proposta) => {
                   const client = clientes.find((c) => c.id === proposta.cliente_id);
+                  const tipo = tiposServico.find((t) => t.id === proposta.tipo_servico_id);
+                  const valorInicial = resolveValorInicialComDesconto(
+                    proposta.campos_valores ?? {},
+                    proposta.desconto_setup,
+                    tipo?.campos,
+                    { setup: proposta.setup }
+                  );
                   const isSetupIsento = proposta.desconto_setup === 100;
 
                   return (
@@ -377,10 +387,12 @@ export default function PropostasPage() {
                           <span className="text-zinc-400 font-medium text-xs bg-zinc-800 border border-zinc-700/80 px-2 py-0.5 rounded w-fit">
                             ISENTO
                           </span>
-                        ) : (
+                        ) : valorInicial.valorBruto > 0 ? (
                           <span className="font-semibold text-zinc-300">
-                            {formatBRL(calcDiscount(proposta.setup, proposta.desconto_setup))}
+                            {formatBRL(valorInicial.valorFinal)}
                           </span>
+                        ) : (
+                          <span className="text-zinc-500 text-xs">—</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -536,7 +548,9 @@ export default function PropostasPage() {
                               Tipo de serviço — {selectedTipo.nome}
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {(selectedTipo.campos ?? []).map((campo) => {
+                              {[...(selectedTipo.campos ?? [])]
+                                .sort((a, b) => a.ordem - b.ordem)
+                                .map((campo) => {
                                 if (campo.tipo_campo === "calculated") {
                                   const valor = computeCampoCalculado(campo, camposValores);
                                   return (
@@ -549,6 +563,10 @@ export default function PropostasPage() {
                                         Calculado automaticamente
                                         {campo.calculo?.operacao === "multiply"
                                           ? " (multiplicação dos campos)"
+                                          : campo.calculo?.operacao === "divide"
+                                          ? " (valor total ÷ número de parcelas)"
+                                          : campo.calculo?.operacao === "add"
+                                          ? " (soma dos campos)"
                                           : ""}
                                       </span>
                                     </div>
@@ -556,25 +574,46 @@ export default function PropostasPage() {
                                 }
 
                                 return (
-                                  <div key={campo.chave} className="flex flex-col gap-1.5">
-                                    <Label>
-                                      {campo.label}
-                                      {campo.obrigatorio ? " *" : ""}
-                                    </Label>
-                                    <Input
-                                      type={campo.tipo_campo === "text" ? "text" : "number"}
-                                      required={campo.obrigatorio}
-                                      value={camposValores[campo.chave] ?? ""}
-                                      onChange={(e) =>
-                                        setCamposValores({
-                                          ...camposValores,
-                                          [campo.chave]: e.target.value,
-                                        })
-                                      }
-                                      placeholder={campo.placeholder}
-                                      className="bg-zinc-900 border-zinc-800 text-zinc-100"
-                                    />
-                                  </div>
+                                  <React.Fragment key={campo.chave}>
+                                    <div className="flex flex-col gap-1.5">
+                                      <Label>
+                                        {campo.label}
+                                        {campo.obrigatorio ? " *" : ""}
+                                      </Label>
+                                      <Input
+                                        type={campo.tipo_campo === "text" ? "text" : "number"}
+                                        required={campo.obrigatorio}
+                                        value={camposValores[campo.chave] ?? ""}
+                                        onChange={(e) =>
+                                          setCamposValores({
+                                            ...camposValores,
+                                            [campo.chave]: e.target.value,
+                                          })
+                                        }
+                                        placeholder={campo.placeholder}
+                                        className="bg-zinc-900 border-zinc-800 text-zinc-100"
+                                      />
+                                    </div>
+                                    {campo.chave === "setup" &&
+                                    tipoServicoTemCampoSetup(selectedTipo.campos) ? (
+                                      <div className="flex flex-col gap-1.5 md:col-span-2">
+                                        <Label htmlFor="setup-descricao">Descrição do setup</Label>
+                                        <textarea
+                                          id="setup-descricao"
+                                          value={camposValores[SETUP_DESCRICAO_CHAVE] ?? ""}
+                                          onChange={(e) =>
+                                            setCamposValores({
+                                              ...camposValores,
+                                              [SETUP_DESCRICAO_CHAVE]: e.target.value,
+                                            })
+                                          }
+                                          placeholder="Descreva o que está incluso na etapa de setup..."
+                                          rows={3}
+                                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#09A3E9]/40"
+                                        />
+                                      </div>
+                                    ) : null}
+                                  </React.Fragment>
                                 );
                               })}
                             </div>
@@ -584,7 +623,7 @@ export default function PropostasPage() {
                             <h3 className="text-sm font-semibold text-white mb-3">Condições Especiais</h3>
                             <div className="grid grid-cols-3 gap-4">
                               <div className="flex flex-col gap-1.5">
-                                <Label>Desconto no setup (%)</Label>
+                                <Label>{getDescontoInicialLabel(selectedTipo.campos)}</Label>
                                 <Input
                                   type="number"
                                   min="0"

@@ -107,6 +107,7 @@ export const dbService = {
   updateUsuario: (id: string, updates: Parameters<typeof apiClient.updateUsuario>[1]) =>
     apiClient.updateUsuario(id, updates),
   reenviarConviteUsuario: (id: string) => apiClient.reenviarConviteUsuario(id),
+  deleteUsuario: (id: string) => apiClient.deleteUsuario(id),
   getTiposUsuario: () => apiClient.getTiposUsuario(),
   addTipoUsuario: (payload: Parameters<typeof apiClient.addTipoUsuario>[0]) =>
     apiClient.addTipoUsuario(payload),

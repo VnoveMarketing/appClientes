@@ -5,14 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Lock, Mail, ArrowRight } from "lucide-react";
+import { Lock, Mail, ArrowRight, ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { AgencyLogo } from "@/components/agency-brand";
 
+type LoginMode = "login" | "forgot";
+
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [mode, setMode] = useState<LoginMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -22,10 +25,15 @@ function LoginPageContent() {
   useEffect(() => {
     if (searchParams.get("convite") === "aceito") {
       setSuccessMsg("Conta ativada com sucesso! Faça login com o e-mail e a senha que você criou.");
+    } else if (searchParams.get("senha") === "redefinida") {
+      setSuccessMsg("Senha redefinida com sucesso! Faça login com sua nova senha.");
     } else if (searchParams.get("error") === "conta_nao_ativada") {
       setErrorMsg(
         "Sua conta ainda não está ativa. Aceite o convite recebido por e-mail e crie sua senha."
       );
+    } else if (searchParams.get("error") === "link_redefinicao_invalido") {
+      setErrorMsg("Link de redefinição inválido ou expirado. Solicite um novo e-mail.");
+      setMode("forgot");
     }
   }, [searchParams]);
 
@@ -61,6 +69,31 @@ function LoginPageContent() {
     router.refresh();
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    const supabase = createClient();
+    const redirectTo = `${window.location.origin}/auth/callback?next=/redefinir-senha`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      setErrorMsg("Não foi possível enviar o e-mail de redefinição. Tente novamente.");
+      return;
+    }
+
+    setSuccessMsg(
+      "Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha."
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#0B0B0B] text-zinc-100 flex flex-col justify-center items-center py-12 px-6 font-sans">
       <div className="absolute top-1/3 left-1/3 w-96 h-96 bg-[#09A3E9]/5 rounded-full blur-3xl -z-10 pointer-events-none" />
@@ -70,64 +103,133 @@ function LoginPageContent() {
           <div className="flex justify-center mb-3">
             <AgencyLogo height={40} />
           </div>
-          <CardTitle className="text-lg font-bold text-white mt-4">Acesso ao Portal Interno</CardTitle>
+          <CardTitle className="text-lg font-bold text-white mt-4">
+            {mode === "login" ? "Acesso ao Portal Interno" : "Redefinir senha"}
+          </CardTitle>
           <CardDescription className="text-zinc-500 text-xs mt-1">
-            Entre com suas credenciais administrativas.
+            {mode === "login"
+              ? "Entre com suas credenciais administrativas."
+              : "Informe seu e-mail para receber o link de redefinição."}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="p-0">
-          <form onSubmit={handleLogin} className="flex flex-col gap-4">
-            {successMsg && (
-              <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
-                {successMsg}
-              </p>
-            )}
-            {errorMsg && (
-              <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md px-3 py-2">
-                {errorMsg}
-              </p>
-            )}
+          {mode === "login" ? (
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              {successMsg && (
+                <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
+                  {successMsg}
+                </p>
+              )}
+              {errorMsg && (
+                <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md px-3 py-2">
+                  {errorMsg}
+                </p>
+              )}
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email" className="text-zinc-400 text-xs flex items-center gap-1.5">
-                <Mail className="size-3.5 text-zinc-500" /> E-mail
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Digite seu e-mail"
-                className="bg-zinc-900 border-zinc-800 text-white text-sm"
-              />
-            </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="email" className="text-zinc-400 text-xs flex items-center gap-1.5">
+                  <Mail className="size-3.5 text-zinc-500" /> E-mail
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Digite seu e-mail"
+                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                />
+              </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password" className="text-zinc-400 text-xs flex items-center gap-1.5">
-                <Lock className="size-3.5 text-zinc-500" /> Senha
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="bg-zinc-900 border-zinc-800 text-white text-sm"
-              />
-            </div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="text-zinc-400 text-xs flex items-center gap-1.5">
+                    <Lock className="size-3.5 text-zinc-500" /> Senha
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("forgot");
+                      setErrorMsg("");
+                      setSuccessMsg("");
+                    }}
+                    className="text-xs text-[#09A3E9] hover:underline"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                />
+              </div>
 
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-bold py-2.5 mt-2 rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-[#09A3E9]/20"
-            >
-              {isLoading ? "Entrando..." : "Acessar Painel"}
-              <ArrowRight className="size-4" />
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-bold py-2.5 mt-2 rounded-lg flex items-center justify-center gap-2 shadow-lg shadow-[#09A3E9]/20"
+              >
+                {isLoading ? "Entrando..." : "Acessar Painel"}
+                <ArrowRight className="size-4" />
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleForgotPassword} className="flex flex-col gap-4">
+              {successMsg && (
+                <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-3 py-2">
+                  {successMsg}
+                </p>
+              )}
+              {errorMsg && (
+                <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md px-3 py-2">
+                  {errorMsg}
+                </p>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="forgot-email" className="text-zinc-400 text-xs flex items-center gap-1.5">
+                  <Mail className="size-3.5 text-zinc-500" /> E-mail cadastrado
+                </Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-bold py-2.5 mt-2 rounded-lg flex items-center justify-center gap-2"
+              >
+                {isLoading ? "Enviando..." : "Enviar link de redefinição"}
+                <ArrowRight className="size-4" />
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-zinc-400 hover:text-white"
+                onClick={() => {
+                  setMode("login");
+                  setErrorMsg("");
+                }}
+              >
+                <ArrowLeft className="size-4 mr-1" />
+                Voltar ao login
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

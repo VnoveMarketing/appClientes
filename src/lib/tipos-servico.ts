@@ -9,7 +9,7 @@ export type TipoServicoCampo = {
   ordem: number;
   obrigatorio: boolean;
   placeholder: string;
-  calculo?: { operacao: "multiply" | "add"; operandos: string[] } | null;
+  calculo?: { operacao: "multiply" | "add" | "divide"; operandos: string[] } | null;
 };
 
 export type TipoServicoEntregavel = {

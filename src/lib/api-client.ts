@@ -19,6 +19,7 @@ type PublicPropostaResponse = {
   proposta: Proposta;
   cliente: Cliente | null;
   cases?: CasePortfolio[];
+  tipo_servico?: TipoServico | null;
 };
 type PublicContratoResponse = { contrato: Contrato; cliente: Cliente | null };
 
@@ -492,6 +493,9 @@ export const apiClient = {
 
   reenviarConviteUsuario: (id: string): Promise<{ success: boolean; message: string }> =>
     apiFetch(`/api/usuarios/${id}/reenviar-convite`, { method: "POST" }),
+
+  deleteUsuario: (id: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/usuarios/${id}`, { method: "DELETE" }),
 
   getTiposUsuario: (): Promise<TipoUsuario[]> => apiFetch("/api/tipos-usuario"),
 

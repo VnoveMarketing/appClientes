@@ -166,7 +166,11 @@ export default function ContratosPage() {
     setSelectedPropostaId(propId);
     const prop = propostas.find((p) => p.id === propId);
     if (prop) {
-      const { valor_final_setup, valor_final_mensal } = getContractFinancialValues(prop);
+      const tipoServico = tiposServico.find((t) => t.id === prop.tipo_servico_id);
+      const { valor_final_setup, valor_final_mensal } = getContractFinancialValues(
+        prop,
+        tipoServico?.campos
+      );
 
       setFinalSetup(valor_final_setup.toString());
       setFinalMensal(valor_final_mensal.toString());
@@ -174,13 +178,17 @@ export default function ContratosPage() {
 
       const client = clientes.find((c) => c.id === prop.cliente_id);
       setConteudoContrato(
-        buildContractContent(prop, {
-          empresa: client?.empresa ?? "CONTRATANTE",
-          cnpj: client?.cnpj,
-          cidade: client?.cidade,
-          estado: client?.estado,
-          nome: client?.nome,
-        })
+        buildContractContent(
+          prop,
+          {
+            empresa: client?.empresa ?? "CONTRATANTE",
+            cnpj: client?.cnpj,
+            cidade: client?.cidade,
+            estado: client?.estado,
+            nome: client?.nome,
+          },
+          { campos: tipoServico?.campos }
+        )
       );
     }
   };
@@ -345,11 +353,18 @@ export default function ContratosPage() {
     const proposta = getRevisaoProposta();
     if (!proposta) return;
 
-    const { valor_final_setup, valor_final_mensal } = getContractFinancialValues({
-      ...proposta,
-      desconto_setup: descontoSetup,
-      desconto_mensalidade: descontoMensalidade,
-    });
+    const tipoServico = proposta.tipo_servico_id
+      ? tiposServico.find((t) => t.id === proposta.tipo_servico_id)
+      : undefined;
+
+    const { valor_final_setup, valor_final_mensal } = getContractFinancialValues(
+      {
+        ...proposta,
+        desconto_setup: descontoSetup,
+        desconto_mensalidade: descontoMensalidade,
+      },
+      tipoServico?.campos
+    );
 
     setRevisaoSetup(String(valor_final_setup));
     setRevisaoMensal(String(valor_final_mensal));

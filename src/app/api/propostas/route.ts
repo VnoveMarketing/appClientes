@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { requirePropostasAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
 import { notifyPropostaPronta } from "@/lib/email/notifications";
 import { syncLegacyFinancialFields } from "@/lib/proposta-campos";
+import { gerarIdentificadorProposta } from "@/lib/proposta-identificador";
 
 export async function GET() {
   const auth = await requirePropostasAccess();
@@ -46,10 +47,13 @@ export async function POST(request: NextRequest) {
     duracao: duracao != null ? Number(duracao) : undefined,
   });
 
+  const identificador = await gerarIdentificadorProposta(auth.supabase);
+
   const { data, error } = await auth.supabase
     .from("propostas")
     .insert([
       {
+        identificador,
         cliente_id,
         tipo_servico_id,
         campos_valores: campos_valores ?? {},

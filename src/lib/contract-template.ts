@@ -18,6 +18,7 @@ type TemplateContext = {
   desconto_mensalidade?: number;
   condicao_descricao?: string | null;
   tipo_servico?: string | null;
+  id_prop?: string | null;
 };
 
 export const CONTRATO_PLACEHOLDERS = [
@@ -34,6 +35,7 @@ export const CONTRATO_PLACEHOLDERS = [
   "{{setup}}",
   "{{mensalidade}}",
   "{{duracao}}",
+  "{{id_prop}}",
 ];
 
 export function renderContractTemplate(template: string, ctx: TemplateContext) {
@@ -64,6 +66,7 @@ export function renderContractTemplate(template: string, ctx: TemplateContext) {
     "{{setup}}": ctx.setup.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
     "{{mensalidade}}": ctx.mensalidade.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
     "{{duracao}}": ctx.duracao === 0 ? "prazo indeterminado" : `${ctx.duracao} meses`,
+    "{{id_prop}}": ctx.id_prop?.trim() || "—",
   };
 
   for (const [chave, valor] of Object.entries(ctx.campos_valores ?? {})) {
