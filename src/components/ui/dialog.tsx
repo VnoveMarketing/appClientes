@@ -7,8 +7,33 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+function Dialog({
+  preventOutsideDismiss,
+  onOpenChange,
+  ...props
+}: DialogPrimitive.Root.Props & {
+  preventOutsideDismiss?: boolean;
+}) {
+  const handleOpenChange: DialogPrimitive.Root.Props["onOpenChange"] = (open, eventDetails) => {
+    if (
+      preventOutsideDismiss &&
+      !open &&
+      (eventDetails.reason === "escapeKey" || eventDetails.reason === "outsidePress")
+    ) {
+      return;
+    }
+
+    onOpenChange?.(open, eventDetails);
+  };
+
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      disablePointerDismissal={preventOutsideDismiss}
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  );
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {

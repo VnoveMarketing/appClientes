@@ -74,5 +74,11 @@ export async function sendEmail(params: {
 }
 
 export function getAppUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  if (configured) return configured;
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) return `https://${vercelUrl.replace(/^https?:\/\//, "")}`;
+
+  return "http://localhost:3000";
 }

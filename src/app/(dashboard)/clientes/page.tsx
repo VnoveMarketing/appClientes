@@ -41,6 +41,7 @@ import {
   FileCheck,
   Eye,
   ImageIcon,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthUser, canAccessContratos } from "@/hooks/use-auth";
@@ -59,6 +60,7 @@ export default function ClientesPage() {
   const canViewContratos = canAccessContratos(authUser?.role);
   const [filterText, setFilterText] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
 
@@ -176,6 +178,7 @@ export default function ClientesPage() {
     };
 
     try {
+      setIsSaving(true);
       if (selectedCliente) {
         await updateMutation.mutateAsync({ id: selectedCliente.id, updates: payload });
         if (logoFile) {
@@ -201,6 +204,8 @@ export default function ClientesPage() {
       closeModal();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Erro ao salvar cliente");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -499,7 +504,7 @@ export default function ClientesPage() {
       </div>
 
       {/* Add/Edit Modal */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen} preventOutsideDismiss>
         <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-lg)">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
@@ -686,6 +691,7 @@ export default function ClientesPage() {
                 type="button"
                 variant="ghost"
                 onClick={closeModal}
+                disabled={isSaving}
                 className="text-zinc-400 hover:text-white"
               >
                 Cancelar
@@ -693,15 +699,18 @@ export default function ClientesPage() {
               <Button
                 type="submit"
                 className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-medium rounded-lg"
-                disabled={addMutation.isPending || updateMutation.isPending}
+                disabled={isSaving}
               >
-                {addMutation.isPending
-                  ? "Cadastrando..."
-                  : updateMutation.isPending
-                  ? "Salvando..."
-                  : selectedCliente
-                  ? "Salvar Alterações"
-                  : "Cadastrar cliente"}
+                {isSaving ? (
+                  <>
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                    {selectedCliente ? "Salvando..." : "Cadastrando..."}
+                  </>
+                ) : selectedCliente ? (
+                  "Salvar Alterações"
+                ) : (
+                  "Cadastrar cliente"
+                )}
               </Button>
             </DialogFooter>
           </form>

@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api/auth";
-import { aceitarConviteUsuario } from "@/lib/convite";
+import { aceitarConviteUsuario, normalizeConviteToken } from "@/lib/convite";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const token = typeof body.token === "string" ? body.token.trim() : "";
+    const token = normalizeConviteToken(typeof body.token === "string" ? body.token : "");
     const password = typeof body.password === "string" ? body.password : "";
     const confirmPassword =
       typeof body.confirm_password === "string" ? body.confirm_password : "";

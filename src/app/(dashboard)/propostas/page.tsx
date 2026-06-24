@@ -55,6 +55,7 @@ import {
   Eye,
   Menu,
   Mail,
+  Loader2,
 } from "lucide-react";
 
 export default function PropostasPage() {
@@ -486,7 +487,7 @@ export default function PropostasPage() {
         )}
       </div>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen} preventOutsideDismiss>
         <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-xl) max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSubmit}>
             <DialogHeader>
@@ -750,15 +751,30 @@ export default function PropostasPage() {
             </div>
 
             <DialogFooter className="mt-4">
-              <Button type="button" variant="ghost" onClick={closeModal} className="text-zinc-400 hover:text-white">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={closeModal}
+                disabled={addMutation.isPending || updateMutation.isPending}
+                className="text-zinc-400 hover:text-white"
+              >
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                disabled={!tipoServicoId}
+                disabled={!tipoServicoId || addMutation.isPending || updateMutation.isPending}
                 className="bg-[#09A3E9] text-white hover:bg-[#09A3E9]/90 font-medium rounded-lg"
               >
-                {selectedProposta ? "Salvar Alterações" : "Salvar Proposta"}
+                {addMutation.isPending || updateMutation.isPending ? (
+                  <>
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                    {selectedProposta ? "Salvando..." : "Salvando proposta..."}
+                  </>
+                ) : selectedProposta ? (
+                  "Salvar Alterações"
+                ) : (
+                  "Salvar Proposta"
+                )}
               </Button>
             </DialogFooter>
           </form>

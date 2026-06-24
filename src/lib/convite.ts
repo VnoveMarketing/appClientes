@@ -6,7 +6,23 @@ import { sendUsuarioConviteEmail } from "@/lib/email/notifications";
 export const CONVITE_VALIDADE_DIAS = 7;
 
 export function generateConviteToken() {
-  return crypto.randomBytes(32).toString("base64url");
+  return crypto.randomBytes(32).toString("hex");
+}
+
+export function normalizeConviteToken(raw: string) {
+  let token = raw.trim();
+
+  try {
+    let decoded = decodeURIComponent(token);
+    while (decoded !== token) {
+      token = decoded;
+      decoded = decodeURIComponent(token);
+    }
+  } catch {
+    // Mantém o valor original quando a decodificação falhar.
+  }
+
+  return token.replace(/\s+/g, "");
 }
 
 export function hashConviteToken(token: string) {
@@ -20,7 +36,8 @@ export function getConviteExpiraEm(from = new Date()) {
 }
 
 export function buildConviteUrl(token: string) {
-  return `${getAppUrl()}/convite?token=${encodeURIComponent(token)}`;
+  const normalized = normalizeConviteToken(token);
+  return `${getAppUrl()}/convite/${normalized}`;
 }
 
 export function isConviteExpirado(expiraEm: string | null | undefined) {
@@ -135,7 +152,8 @@ export async function provisionUsuarioConvite(
 
 export async function getProfileByConviteToken(token: string) {
   const admin = getAdminSupabase();
-  const tokenHash = hashConviteToken(token);
+  const normalizedToken = normalizeConviteToken(token);
+  const tokenHash = hashConviteToken(normalizedToken);
 
   const { data: profile, error } = await admin
     .from("profiles")

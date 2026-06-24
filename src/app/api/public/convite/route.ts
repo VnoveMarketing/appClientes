@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api/auth";
-import { getProfileByConviteToken } from "@/lib/convite";
+import { getProfileByConviteToken, normalizeConviteToken } from "@/lib/convite";
 
 export async function GET(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get("token")?.trim();
+  const token = normalizeConviteToken(request.nextUrl.searchParams.get("token") ?? "");
 
   if (!token) {
     return errorResponse("Token de convite é obrigatório", 400);
