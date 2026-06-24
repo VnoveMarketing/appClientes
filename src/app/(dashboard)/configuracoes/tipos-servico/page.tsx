@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Edit2, Layers, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Edit2, Layers, ChevronUp, ChevronDown, Copy } from "lucide-react";
 import {
   formatOperandosText,
   parseOperandosText,
@@ -69,10 +69,35 @@ const emptyEntregavel = (): EntregavelDraft => ({
   ordem: 0,
 });
 
+function mapTipoToForm(tipo: TipoServico, asDuplicate = false) {
+  return {
+    nome: asDuplicate ? `${tipo.nome} (cópia)` : tipo.nome,
+    descricao: tipo.descricao,
+    campos: tipo.campos?.length
+      ? [...tipo.campos]
+          .sort((a, b) => a.ordem - b.ordem)
+          .map(({ id, tipo_servico_id: _tipoServicoId, ...campo }, index) => ({
+            ...campo,
+            calculo: campo.calculo
+              ? {
+                  ...campo.calculo,
+                  operandosText: formatOperandosText(campo.calculo.operandos),
+                }
+              : null,
+            ordem: index,
+            draftId: asDuplicate ? createDraftId() : id,
+          }))
+      : [emptyCampo()],
+    entregaveis:
+      tipo.entregaveis?.map(({ nome, descricao, ordem }) => ({ nome, descricao, ordem })) ?? [],
+  };
+}
+
 export default function TiposServicoPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<TipoServico | null>(null);
+  const [duplicatingFrom, setDuplicatingFrom] = useState<TipoServico | null>(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [campos, setCampos] = useState<CampoDraftRow[]>([emptyCampo()]);
@@ -125,6 +150,7 @@ export default function TiposServicoPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tipos-servico"] });
+      setDuplicatingFrom(null);
       setIsModalOpen(false);
     },
   });
@@ -136,6 +162,7 @@ export default function TiposServicoPage() {
 
   const openCreate = () => {
     setEditing(null);
+    setDuplicatingFrom(null);
     setNome("");
     setDescricao("");
     setCampos([emptyCampo()]);
@@ -145,28 +172,23 @@ export default function TiposServicoPage() {
 
   const openEdit = (tipo: TipoServico) => {
     setEditing(tipo);
-    setNome(tipo.nome);
-    setDescricao(tipo.descricao);
-    setCampos(
-      tipo.campos?.length
-        ? [...tipo.campos]
-            .sort((a, b) => a.ordem - b.ordem)
-            .map(({ id, tipo_servico_id: _tipoServicoId, ...campo }, index) => ({
-              ...campo,
-              calculo: campo.calculo
-                ? {
-                    ...campo.calculo,
-                    operandosText: formatOperandosText(campo.calculo.operandos),
-                  }
-                : null,
-              ordem: index,
-              draftId: id,
-            }))
-        : [emptyCampo()]
-    );
-    setEntregaveis(
-      tipo.entregaveis?.map(({ nome, descricao, ordem }) => ({ nome, descricao, ordem })) ?? []
-    );
+    setDuplicatingFrom(null);
+    const form = mapTipoToForm(tipo);
+    setNome(form.nome);
+    setDescricao(form.descricao);
+    setCampos(form.campos);
+    setEntregaveis(form.entregaveis);
+    setIsModalOpen(true);
+  };
+
+  const openDuplicate = (tipo: TipoServico) => {
+    setEditing(null);
+    setDuplicatingFrom(tipo);
+    const form = mapTipoToForm(tipo, true);
+    setNome(form.nome);
+    setDescricao(form.descricao);
+    setCampos(form.campos);
+    setEntregaveis(form.entregaveis);
     setIsModalOpen(true);
   };
 
@@ -215,7 +237,15 @@ export default function TiposServicoPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(tipo)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Duplicar tipo"
+                    onClick={() => openDuplicate(tipo)}
+                  >
+                    <Copy className="size-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="sm" title="Editar tipo" onClick={() => openEdit(tipo)}>
                     <Edit2 className="size-3.5" />
                   </Button>
                   <Button
@@ -235,10 +265,22 @@ export default function TiposServicoPage() {
         )}
       </div>
 
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          setIsModalOpen(open);
+          if (!open) setDuplicatingFrom(null);
+        }}
+      >
         <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-xl) max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Editar Tipo" : "Novo Tipo de Serviço"}</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? "Editar Tipo"
+                : duplicatingFrom
+                  ? "Duplicar Tipo de Serviço"
+                  : "Novo Tipo de Serviço"}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
@@ -529,7 +571,13 @@ export default function TiposServicoPage() {
               disabled={!nome.trim() || saveMutation.isPending}
               className="bg-[#09A3E9] text-white"
             >
-              {saveMutation.isPending ? "Salvando..." : "Salvar"}
+              {saveMutation.isPending
+                ? "Salvando..."
+                : editing
+                  ? "Salvar"
+                  : duplicatingFrom
+                    ? "Criar cópia"
+                    : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>

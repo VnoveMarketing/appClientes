@@ -977,6 +977,10 @@
   gap: 8px;
 }
 
+.prop-field-full {
+  grid-column: 1 / -1;
+}
+
 .prop-field-label {
   font-family: var(--font-barlow-condensed), "Barlow Condensed", sans-serif;
   font-size: 10px;

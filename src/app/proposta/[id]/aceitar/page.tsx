@@ -6,10 +6,12 @@ import { dbService } from "@/lib/db-service";
 import Link from "next/link";
 import { AgencyLogo } from "@/components/agency-brand";
 import { useRouter } from "next/navigation";
-import { formatCnpjInput, isCnpjComplete, stripCnpj } from "@/lib/cnpj-brasil-api";
+import { formatCnpjInput, formatCepInput, isCnpjComplete, isCnpjValid, stripCnpj } from "@/lib/cnpj-brasil-api";
+import { formatCpfInput } from "@/lib/cpf-brasil";
 import {
   buildClienteDadosFromCnpjLookup,
-  clienteTemCadastroCnpj,
+  clienteDadosCnpjCarregados,
+  validarDadosAceiteProposta,
 } from "@/lib/cliente-cadastro";
 import type { Cliente } from "@/lib/types";
 
@@ -22,6 +24,10 @@ type CnpjFormData = {
   estado?: string;
   ramo_atividade?: string;
   nome?: string;
+  endereco_rua?: string;
+  endereco_numero?: string;
+  endereco_complemento?: string;
+  cep?: string;
 };
 
 export default function AceitarPropostaPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,11 +42,20 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
   const [ramoAtividade, setRamoAtividade] = useState("");
   const [cidade, setCidade] = useState("");
   const [estado, setEstado] = useState("");
+  const [enderecoRua, setEnderecoRua] = useState("");
+  const [enderecoNumero, setEnderecoNumero] = useState("");
+  const [enderecoComplemento, setEnderecoComplemento] = useState("");
+  const [cep, setCep] = useState("");
   const [responsavelLegal, setResponsavelLegal] = useState("");
+  const [representanteCpf, setRepresentanteCpf] = useState("");
+  const [representanteEmail, setRepresentanteEmail] = useState("");
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupInfo, setLookupInfo] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const lastLookupRef = useRef<string>("");
+  const cnpjLookupDoneRef = useRef<Set<string>>(new Set());
+  const hydratedClientIdRef = useRef<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["public-proposta", id],
@@ -51,23 +66,33 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
   const client = data?.cliente;
 
   React.useEffect(() => {
-    if (client) {
-      setEmpresaNome(client.empresa || "");
+    if (!client) return;
+    if (hydratedClientIdRef.current === client.id) return;
+    hydratedClientIdRef.current = client.id;
+
+    setEmpresaNome(client.empresa || "");
       setEmailCorporativo(client.email || "");
       setTelefonePrincipal(client.telefone || "");
       setResponsavelLegal(client.nome || "");
       setCnpj(client.cnpj ? formatCnpjInput(client.cnpj) : "");
-      if (client.cnpj) {
-        lastLookupRef.current = stripCnpj(client.cnpj);
-      }
       setRamoAtividade(client.ramo_atividade || "");
       setCidade(client.cidade || "");
       setEstado(client.estado || "");
+      setEnderecoRua(client.endereco_rua || "");
+      setEnderecoNumero(client.endereco_numero || "");
+      setEnderecoComplemento(client.endereco_complemento || "");
+      setCep(client.cep ? formatCepInput(client.cep) : "");
+      setRepresentanteCpf(client.representante_cpf ? formatCpfInput(client.representante_cpf) : "");
+      setRepresentanteEmail(client.representante_email || "");
 
-      if (clienteTemCadastroCnpj(client)) {
+      const digits = stripCnpj(client.cnpj ?? "");
+      if (isCnpjComplete(digits) && clienteDadosCnpjCarregados(client)) {
+        cnpjLookupDoneRef.current.add(digits);
+        lastLookupRef.current = digits;
         setLookupInfo("Dados carregados do cadastro salvo da empresa.");
+      } else {
+        lastLookupRef.current = "";
       }
-    }
   }, [client]);
 
   const applyCnpjData = (data: CnpjFormData) => {
@@ -79,6 +104,12 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
     if (data.estado) setEstado(data.estado.slice(0, 2).toUpperCase());
     if (data.ramo_atividade) setRamoAtividade(data.ramo_atividade);
     if (data.nome) setResponsavelLegal(data.nome);
+    if (data.endereco_rua != null && data.endereco_rua !== "") setEnderecoRua(data.endereco_rua);
+    if (data.endereco_numero != null && data.endereco_numero !== "") {
+      setEnderecoNumero(data.endereco_numero);
+    }
+    if (data.endereco_complemento != null) setEnderecoComplemento(data.endereco_complemento);
+    if (data.cep) setCep(formatCepInput(data.cep));
   };
 
   const applyClienteCadastro = (cadastro: Cliente) => {
@@ -90,6 +121,14 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
     if (cadastro.estado) setEstado(cadastro.estado);
     if (cadastro.ramo_atividade) setRamoAtividade(cadastro.ramo_atividade);
     if (cadastro.nome) setResponsavelLegal(cadastro.nome);
+    if (cadastro.endereco_rua) setEnderecoRua(cadastro.endereco_rua);
+    if (cadastro.endereco_numero) setEnderecoNumero(cadastro.endereco_numero);
+    if (cadastro.endereco_complemento) setEnderecoComplemento(cadastro.endereco_complemento);
+    if (cadastro.cep) setCep(formatCepInput(cadastro.cep));
+    if (cadastro.representante_cpf) {
+      setRepresentanteCpf(formatCpfInput(cadastro.representante_cpf));
+    }
+    if (cadastro.representante_email) setRepresentanteEmail(cadastro.representante_email);
   };
 
   const lookupCnpj = useCallback(
@@ -97,9 +136,17 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
       const digits = stripCnpj(value);
 
       if (!isCnpjComplete(digits)) return;
-      if (lastLookupRef.current === digits) return;
 
-      if (client && clienteTemCadastroCnpj(client, digits)) {
+      if (!isCnpjValid(digits)) {
+        setLookupError("CNPJ inválido. Verifique os dígitos informados.");
+        setLookupInfo(null);
+        return;
+      }
+
+      if (cnpjLookupDoneRef.current.has(digits) || lastLookupRef.current === digits) return;
+
+      if (client && clienteDadosCnpjCarregados(client, digits)) {
+        cnpjLookupDoneRef.current.add(digits);
         lastLookupRef.current = digits;
         applyClienteCadastro(client);
         setLookupError(null);
@@ -113,23 +160,41 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
 
       try {
         const result = await dbService.lookupCnpj(digits);
+        cnpjLookupDoneRef.current.add(digits);
         lastLookupRef.current = digits;
         applyCnpjData(result);
 
-        await dbService.savePublicPropostaClienteDados(
-          id,
-          buildClienteDadosFromCnpjLookup(result)
-        );
-        queryClient.invalidateQueries({ queryKey: ["public-proposta", id] });
+        try {
+          const savedCliente = await dbService.savePublicPropostaClienteDados(
+            id,
+            buildClienteDadosFromCnpjLookup(result)
+          );
+
+          queryClient.setQueryData(
+            ["public-proposta", id],
+            (current: Awaited<ReturnType<typeof dbService.getPublicPropostaWithCliente>> | undefined) =>
+              current ? { ...current, cliente: savedCliente as Cliente } : current
+          );
+        } catch (saveErr) {
+          console.warn("[aceitar] Falha ao salvar dados do CNPJ:", saveErr);
+        }
 
         if (result.situacao_cadastral) {
           setLookupInfo(
-            `Dados carregados e salvos. Situação cadastral: ${result.situacao_cadastral}.`
+            `Dados carregados. Situação cadastral: ${result.situacao_cadastral}.` +
+              (!result.endereco_numero?.trim()
+                ? " Informe o número do endereço — a Receita Federal não disponibilizou esse dado."
+                : "")
+          );
+        } else if (!result.endereco_numero?.trim()) {
+          setLookupInfo(
+            "Dados da empresa carregados. Informe o número do endereço — a Receita Federal não disponibilizou esse dado."
           );
         } else {
           setLookupInfo("Dados da empresa carregados e salvos no cadastro.");
         }
       } catch (err) {
+        cnpjLookupDoneRef.current.delete(digits);
         lastLookupRef.current = "";
         setLookupError(
           err instanceof Error ? err.message : "Não foi possível consultar o CNPJ."
@@ -141,6 +206,16 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
     [client, id, queryClient]
   );
 
+  React.useEffect(() => {
+    if (!client?.cnpj) return;
+    const digits = stripCnpj(client.cnpj);
+    if (!isCnpjComplete(digits) || !isCnpjValid(digits)) return;
+    if (cnpjLookupDoneRef.current.has(digits)) return;
+    if (clienteDadosCnpjCarregados(client)) return;
+
+    lookupCnpj(formatCnpjInput(client.cnpj));
+  }, [client, lookupCnpj]);
+
   const handleCnpjChange = (value: string) => {
     const formatted = formatCnpjInput(value);
     setCnpj(formatted);
@@ -150,9 +225,17 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
     const digits = stripCnpj(formatted);
     if (digits.length < 14) {
       lastLookupRef.current = "";
+      cnpjLookupDoneRef.current.clear();
       return;
     }
 
+    if (!isCnpjValid(digits)) {
+      setLookupError("CNPJ inválido. Verifique os dígitos informados.");
+      return;
+    }
+
+    cnpjLookupDoneRef.current.delete(digits);
+    lastLookupRef.current = "";
     lookupCnpj(formatted);
   };
 
@@ -167,6 +250,12 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
         cidade: string;
         estado: string;
         nome: string;
+        representante_cpf: string;
+        representante_email: string;
+        endereco_rua: string;
+        endereco_numero: string;
+        endereco_complemento: string;
+        cep: string;
       };
     }) => {
       await dbService.acceptPublicProposta(id, payload.clientUpdates);
@@ -177,6 +266,11 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
       queryClient.invalidateQueries({ queryKey: ["clientes"] });
       queryClient.invalidateQueries({ queryKey: ["contratos"] });
       router.push(`/proposta/${id}/sucesso`);
+    },
+    onError: (err) => {
+      setSubmitError(
+        err instanceof Error ? err.message : "Não foi possível aceitar a proposta."
+      );
     },
   });
 
@@ -211,18 +305,37 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    acceptMutation.mutate({
-      clientUpdates: {
-        empresa: empresaNome,
-        email: emailCorporativo,
-        telefone: telefonePrincipal,
-        cnpj,
-        ramo_atividade: ramoAtividade,
-        cidade,
-        estado,
-        nome: responsavelLegal,
-      },
-    });
+    setSubmitError(null);
+
+    if (isLookingUp) {
+      setSubmitError("Aguarde a consulta do CNPJ terminar antes de aceitar a proposta.");
+      return;
+    }
+
+    const clientUpdates = {
+      empresa: empresaNome,
+      email: emailCorporativo,
+      telefone: telefonePrincipal,
+      cnpj,
+      ramo_atividade: ramoAtividade,
+      cidade,
+      estado,
+      nome: responsavelLegal,
+      representante_cpf: representanteCpf,
+      representante_email: representanteEmail,
+      endereco_rua: enderecoRua,
+      endereco_numero: enderecoNumero,
+      endereco_complemento: enderecoComplemento,
+      cep,
+    };
+
+    const validationError = validarDadosAceiteProposta(clientUpdates);
+    if (validationError) {
+      setSubmitError(validationError);
+      return;
+    }
+
+    acceptMutation.mutate({ clientUpdates });
   };
 
   return (
@@ -245,11 +358,11 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
             CONCLUIR <em style={{ color: "var(--prop-gray-500)", fontStyle: "normal" }}>CADASTRO</em>
           </h1>
           <p className="prop-form-desc">
-            Informe o CNPJ da empresa para buscar os dados automaticamente e confirme as
-            informações antes de aceitar a proposta.
+            Informe o CNPJ da empresa para buscar os dados automaticamente. Revise e preencha
+            manualmente todos os campos obrigatórios antes de aceitar a proposta.
           </p>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             <div className="prop-cnpj-lookup">
               <label htmlFor="cnpj" className="prop-field-label">
                 CNPJ da empresa *
@@ -333,6 +446,58 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
                   className="prop-input"
                 />
               </div>
+              <div className="prop-field prop-field-full">
+                <label htmlFor="enderecoRua" className="prop-field-label">
+                  Rua / Logradouro *
+                </label>
+                <input
+                  id="enderecoRua"
+                  required
+                  value={enderecoRua}
+                  onChange={(e) => setEnderecoRua(e.target.value)}
+                  placeholder="Rua Exemplo"
+                  className="prop-input"
+                />
+              </div>
+              <div className="prop-field">
+                <label htmlFor="enderecoNumero" className="prop-field-label">
+                  Número *
+                </label>
+                <input
+                  id="enderecoNumero"
+                  required
+                  value={enderecoNumero}
+                  onChange={(e) => setEnderecoNumero(e.target.value)}
+                  placeholder="123"
+                  className="prop-input"
+                />
+              </div>
+              <div className="prop-field">
+                <label htmlFor="enderecoComplemento" className="prop-field-label">
+                  Complemento
+                </label>
+                <input
+                  id="enderecoComplemento"
+                  value={enderecoComplemento}
+                  onChange={(e) => setEnderecoComplemento(e.target.value)}
+                  placeholder="Sala, bloco, andar..."
+                  className="prop-input"
+                />
+              </div>
+              <div className="prop-field">
+                <label htmlFor="cep" className="prop-field-label">
+                  CEP *
+                </label>
+                <input
+                  id="cep"
+                  required
+                  value={cep}
+                  onChange={(e) => setCep(formatCepInput(e.target.value))}
+                  placeholder="00000-000"
+                  className="prop-input"
+                  inputMode="numeric"
+                />
+              </div>
               <div className="prop-field">
                 <label htmlFor="cidade" className="prop-field-label">
                   Cidade *
@@ -373,7 +538,7 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
                   className="prop-input"
                 />
               </div>
-              <div className="prop-field">
+              <div className="prop-field prop-field-full">
                 <label htmlFor="responsavel" className="prop-field-label">
                   Representante legal *
                 </label>
@@ -386,9 +551,38 @@ export default function AceitarPropostaPage({ params }: { params: Promise<{ id: 
                   className="prop-input"
                 />
               </div>
+              <div className="prop-field">
+                <label htmlFor="representanteCpf" className="prop-field-label">
+                  CPF do representante *
+                </label>
+                <input
+                  id="representanteCpf"
+                  required
+                  value={representanteCpf}
+                  onChange={(e) => setRepresentanteCpf(formatCpfInput(e.target.value))}
+                  placeholder="000.000.000-00"
+                  className="prop-input"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="prop-field">
+                <label htmlFor="representanteEmail" className="prop-field-label">
+                  E-mail do representante *
+                </label>
+                <input
+                  id="representanteEmail"
+                  type="email"
+                  required
+                  value={representanteEmail}
+                  onChange={(e) => setRepresentanteEmail(e.target.value)}
+                  placeholder="representante@empresa.com"
+                  className="prop-input"
+                />
+              </div>
             </div>
 
             <div className="prop-form-actions">
+              {submitError ? <p className="prop-error-text">{submitError}</p> : null}
               <button
                 type="submit"
                 disabled={acceptMutation.isPending || isLookingUp}

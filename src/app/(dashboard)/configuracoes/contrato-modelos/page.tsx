@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import type { ContratoModelo } from "@/lib/types";
-import { CONTRATO_PLACEHOLDERS } from "@/lib/contract-template";
+import { CONTRATO_PLACEHOLDER_ITEMS } from "@/lib/contract-template";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -223,14 +223,20 @@ export default function ContratoModelosPage() {
             <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
               <p className="text-xs text-zinc-400 mb-2">Placeholders disponíveis:</p>
               <div className="flex flex-wrap gap-1.5">
-                {CONTRATO_PLACEHOLDERS.map((p) => (
-                  <code key={p} className="text-[10px] bg-zinc-900 px-1.5 py-0.5 rounded text-[#09A3E9]">
-                    {p}
-                  </code>
+                {CONTRATO_PLACEHOLDER_ITEMS.map(({ token, label }) => (
+                  <span
+                    key={token}
+                    title={label}
+                    className="inline-flex items-center gap-1 rounded bg-zinc-900 px-1.5 py-0.5"
+                  >
+                    <code className="text-[10px] text-[#09A3E9]">{token}</code>
+                    <span className="text-[10px] text-zinc-500">{label}</span>
+                  </span>
                 ))}
-                <code className="text-[10px] bg-zinc-900 px-1.5 py-0.5 rounded text-zinc-500">
-                  {"{{campo.chave}}"}
-                </code>
+                <span className="inline-flex items-center gap-1 rounded bg-zinc-900 px-1.5 py-0.5">
+                  <code className="text-[10px] text-zinc-500">{"{{campo.chave}}"}</code>
+                  <span className="text-[10px] text-zinc-500">Campo do tipo de serviço</span>
+                </span>
               </div>
             </div>
 

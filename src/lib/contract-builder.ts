@@ -36,6 +36,12 @@ export type ClienteForContract = {
   cidade?: string | null;
   estado?: string | null;
   nome?: string | null;
+  representante_cpf?: string | null;
+  representante_email?: string | null;
+  endereco_rua?: string | null;
+  endereco_numero?: string | null;
+  endereco_complemento?: string | null;
+  cep?: string | null;
 };
 
 export function calcDiscountedValue(val: number, pct: number) {
@@ -136,6 +142,12 @@ export function buildContractContentResolved(
         cidade: cliente.cidade,
         estado: cliente.estado,
         representante_legal: cliente.nome,
+        representante_cpf: cliente.representante_cpf,
+        representante_email: cliente.representante_email,
+        endereco_rua: cliente.endereco_rua,
+        endereco_numero: cliente.endereco_numero,
+        endereco_complemento: cliente.endereco_complemento,
+        cep: cliente.cep,
         escopo: proposta.escopo,
         escopo_descricao_adicional: proposta.escopo_descricao_adicional,
         campos_valores: proposta.campos_valores ?? {},

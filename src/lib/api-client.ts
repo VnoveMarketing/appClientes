@@ -248,6 +248,9 @@ export const apiClient = {
       body: JSON.stringify(updates),
     }),
 
+  deleteContrato: (id: string): Promise<void> =>
+    apiFetch(`/api/contratos/${id}`, { method: "DELETE" }),
+
   getContratoEvidencias: (id: string): Promise<ContratoAssinaturaEvidencias> =>
     apiFetch(`/api/contratos/${id}/evidencias`),
 
@@ -290,6 +293,12 @@ export const apiClient = {
       cidade: string;
       estado: string;
       nome: string;
+      representante_cpf: string;
+      representante_email: string;
+      endereco_rua: string;
+      endereco_numero: string;
+      endereco_complemento: string;
+      cep: string;
     }
   ): Promise<Proposta> =>
     apiFetch(`/api/public/propostas/${id}/aceitar`, {
@@ -308,9 +317,15 @@ export const apiClient = {
       cidade?: string;
       estado?: string;
       nome?: string;
+      representante_cpf?: string;
+      representante_email?: string;
+      endereco_rua?: string;
+      endereco_numero?: string;
+      endereco_complemento?: string;
+      cep?: string;
     }
   ) =>
-    apiFetch(`/api/public/propostas/${id}/cliente-dados`, {
+    apiFetch<Cliente>(`/api/public/propostas/${id}/cliente-dados`, {
       method: "PATCH",
       body: JSON.stringify(dados),
     }),
@@ -382,6 +397,10 @@ export const apiClient = {
       ramo_atividade?: string;
       nome?: string;
       situacao_cadastral?: string;
+      endereco_rua?: string;
+      endereco_numero?: string;
+      endereco_complemento?: string;
+      cep?: string;
     }>(`/api/public/cnpj/${encodeURIComponent(cnpj.replace(/\D/g, ""))}`),
 
   // TIPOS DE SERVIÇO

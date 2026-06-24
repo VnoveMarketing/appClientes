@@ -16,6 +16,12 @@ export interface Cliente {
   logo_url?: string | null;
   hero_image_url?: string | null;
   categoria_case_id?: string | null;
+  representante_cpf?: string | null;
+  representante_email?: string | null;
+  endereco_rua?: string | null;
+  endereco_numero?: string | null;
+  endereco_complemento?: string | null;
+  cep?: string | null;
   status: 'Ativa' | 'Bloqueada' | 'Pendente';
   assinatura: 'active' | 'canceled';
   cliente_desde: string;

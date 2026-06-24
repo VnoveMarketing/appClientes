@@ -83,3 +83,43 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (error) return errorResponse(error.message, 500);
   return jsonResponse(data);
 }
+
+export async function DELETE(_request: NextRequest, context: RouteContext) {
+  const { id } = await context.params;
+  const auth = await requireContratosAccess();
+  if ("error" in auth) return auth.error;
+
+  const { data: contrato, error: fetchError } = await auth.supabase
+    .from("contratos")
+    .select("id, proposta_id, status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchError) return errorResponse(fetchError.message, 500);
+  if (!contrato) return errorResponse("Contrato não encontrado", 404);
+
+  if (contrato.status === "assinado") {
+    return errorResponse("Contratos assinados não podem ser excluídos.", 400);
+  }
+
+  const { error: evidenciasError } = await auth.supabase
+    .from("contrato_assinatura_evidencias")
+    .delete()
+    .eq("contrato_id", id);
+
+  if (evidenciasError) return errorResponse(evidenciasError.message, 500);
+
+  const { error: deleteError } = await auth.supabase.from("contratos").delete().eq("id", id);
+  if (deleteError) return errorResponse(deleteError.message, 500);
+
+  if (contrato.proposta_id) {
+    const { error: propostaError } = await auth.supabase
+      .from("propostas")
+      .update({ status: "aceita" })
+      .eq("id", contrato.proposta_id);
+
+    if (propostaError) return errorResponse(propostaError.message, 500);
+  }
+
+  return jsonResponse({ success: true });
+}

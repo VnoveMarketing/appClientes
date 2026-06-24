@@ -28,6 +28,12 @@ type ClienteRow = {
   cidade?: string | null;
   estado?: string | null;
   nome?: string | null;
+  representante_cpf?: string | null;
+  representante_email?: string | null;
+  endereco_rua?: string | null;
+  endereco_numero?: string | null;
+  endereco_complemento?: string | null;
+  cep?: string | null;
 };
 
 export async function generateContractFromProposta(

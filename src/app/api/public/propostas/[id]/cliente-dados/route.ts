@@ -14,6 +14,12 @@ const ALLOWED_FIELDS = [
   "cidade",
   "estado",
   "nome",
+  "representante_cpf",
+  "representante_email",
+  "endereco_rua",
+  "endereco_numero",
+  "endereco_complemento",
+  "cep",
 ] as const;
 
 export async function PATCH(request: NextRequest, context: RouteContext) {

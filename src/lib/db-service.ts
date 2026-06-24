@@ -49,6 +49,7 @@ export const dbService = {
     apiClient.addContrato(contrato),
   updateContrato: (id: string, updates: Partial<Contrato>) =>
     apiClient.updateContrato(id, updates),
+  deleteContrato: (id: string) => apiClient.deleteContrato(id),
   getContratoEvidencias: (id: string) => apiClient.getContratoEvidencias(id),
 
   // Public pages

@@ -48,6 +48,7 @@ import {
   ShieldCheck,
   Pencil,
   Send,
+  Trash2,
 } from "lucide-react";
 import { useHasMounted, ClientDate } from "@/components/client-date";
 import { ContratoEvidenciasPanel } from "@/components/contrato-evidencias-panel";
@@ -256,6 +257,19 @@ export default function ContratosPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (contratoId: string) => dbService.deleteContrato(contratoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contratos"] });
+      queryClient.invalidateQueries({ queryKey: ["propostas"] });
+      setRevisaoContrato(null);
+      setEvidenciasContratoId(null);
+    },
+    onError: (err) => {
+      alert(err instanceof Error ? err.message : "Não foi possível excluir o contrato.");
+    },
+  });
+
   const openRevisaoModal = (contrato: Contrato) => {
     const proposta = propostas.find((p) => p.id === contrato.proposta_id);
 
@@ -427,6 +441,25 @@ export default function ContratosPage() {
     const link = `${window.location.origin}/contrato/${id}`;
     navigator.clipboard.writeText(link);
     alert("Link de assinatura digital copiado:\n" + link);
+  };
+
+  const handleDeleteContrato = (contrato: Contrato) => {
+    const client = clientes.find((c) => c.id === contrato.cliente_id);
+    const empresa = client?.empresa ?? "este cliente";
+
+    if (contrato.status === "assinado") {
+      alert("Contratos assinados não podem ser excluídos.");
+      return;
+    }
+
+    const mensagem =
+      contrato.status === "pendente_assinatura"
+        ? `Excluir o contrato de "${empresa}"?\n\nO link de assinatura deixará de funcionar e a proposta voltará para o status "aceita".`
+        : `Excluir o contrato de "${empresa}"?\n\nA proposta voltará para o status "aceita" e poderá gerar um novo contrato.`;
+
+    if (!confirm(mensagem)) return;
+
+    deleteMutation.mutate(contrato.id);
   };
 
   return (
@@ -612,6 +645,18 @@ export default function ContratosPage() {
                               Visualizar
                             </Button>
                           </a>
+                          {contrato.status !== "assinado" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDeleteContrato(contrato)}
+                              disabled={deleteMutation.isPending}
+                              className="h-7 text-xs border-rose-500/30 text-rose-400 hover:bg-rose-500/10"
+                            >
+                              <Trash2 className="size-3 mr-1" />
+                              Excluir
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

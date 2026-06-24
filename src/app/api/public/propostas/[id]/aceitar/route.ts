@@ -7,6 +7,7 @@ import {
   notifyContratoDisponivelRevisaoFinanceiro,
 } from "@/lib/email/notifications";
 import { generateContractFromProposta } from "@/lib/auto-contract";
+import { validarDadosAceiteProposta } from "@/lib/cliente-cadastro";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -26,6 +27,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         cidade: string;
         estado: string;
         nome: string;
+        representante_cpf: string;
+        representante_email: string;
+        endereco_rua: string;
+        endereco_numero: string;
+        endereco_complemento: string;
+        cep: string;
       };
     };
 
@@ -40,6 +47,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (!["pendente", "em_analise"].includes(proposta.status)) {
       return errorResponse("Proposta não pode ser aceita neste status", 400);
+    }
+
+    const validationError = validarDadosAceiteProposta(clientUpdates);
+    if (validationError) {
+      return errorResponse(validationError, 400);
     }
 
     const { error: clienteError } = await supabase
