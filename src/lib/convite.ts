@@ -40,6 +40,75 @@ export function buildConviteUrl(token: string) {
   return `${getAppUrl()}/convite/${normalized}`;
 }
 
+async function persistConviteProfile(
+  admin: ReturnType<typeof getAdminSupabase>,
+  userId: string,
+  payload: {
+    email: string;
+    full_name: string;
+    role: string;
+    tipo_usuario_id: string;
+    convite_token_hash: string;
+    convite_expira_em: string;
+    convite_enviado_em: string;
+  }
+) {
+  const { data: updated, error: updateError } = await admin
+    .from("profiles")
+    .update({
+      email: payload.email,
+      full_name: payload.full_name,
+      role: payload.role,
+      tipo_usuario_id: payload.tipo_usuario_id,
+      nivel_permissao: null,
+      convite_status: "pendente",
+      convite_enviado_em: payload.convite_enviado_em,
+      convite_aceito_em: null,
+      convite_token_hash: payload.convite_token_hash,
+      convite_expira_em: payload.convite_expira_em,
+      ativo: true,
+    })
+    .eq("id", userId)
+    .select("id, convite_token_hash")
+    .maybeSingle();
+
+  if (updateError) throw new Error(updateError.message);
+
+  if (updated?.convite_token_hash === payload.convite_token_hash) {
+    return updated;
+  }
+
+  const { data: inserted, error: insertError } = await admin
+    .from("profiles")
+    .upsert(
+      {
+        id: userId,
+        email: payload.email,
+        full_name: payload.full_name,
+        role: payload.role,
+        tipo_usuario_id: payload.tipo_usuario_id,
+        nivel_permissao: null,
+        convite_status: "pendente",
+        convite_enviado_em: payload.convite_enviado_em,
+        convite_aceito_em: null,
+        convite_token_hash: payload.convite_token_hash,
+        convite_expira_em: payload.convite_expira_em,
+        ativo: true,
+      },
+      { onConflict: "id" }
+    )
+    .select("id, convite_token_hash")
+    .single();
+
+  if (insertError) throw new Error(insertError.message);
+
+  if (inserted.convite_token_hash !== payload.convite_token_hash) {
+    throw new Error("Não foi possível salvar o token do convite. Tente reenviar o convite.");
+  }
+
+  return inserted;
+}
+
 export function isConviteExpirado(expiraEm: string | null | undefined) {
   if (!expiraEm) return true;
   return new Date(expiraEm).getTime() < Date.now();
@@ -112,29 +181,15 @@ export async function provisionUsuarioConvite(
     }
   }
 
-  const { data: profile, error: profileError } = await admin
-    .from("profiles")
-    .upsert(
-      {
-        id: userId,
-        email: normalizedEmail,
-        full_name: params.full_name.trim(),
-        role: params.tipo_slug,
-        tipo_usuario_id: params.tipo_usuario_id,
-        nivel_permissao: null,
-        convite_status: "pendente",
-        convite_enviado_em: now,
-        convite_aceito_em: null,
-        convite_token_hash: tokenHash,
-        convite_expira_em: expiraEm,
-        ativo: true,
-      },
-      { onConflict: "id" }
-    )
-    .select("id")
-    .single();
-
-  if (profileError) throw new Error(profileError.message);
+  const profile = await persistConviteProfile(admin, userId, {
+    email: normalizedEmail,
+    full_name: params.full_name.trim(),
+    role: params.tipo_slug,
+    tipo_usuario_id: params.tipo_usuario_id,
+    convite_token_hash: tokenHash,
+    convite_expira_em: expiraEm,
+    convite_enviado_em: now,
+  });
 
   const emailResult = await sendUsuarioConviteEmail({
     to: normalizedEmail,
