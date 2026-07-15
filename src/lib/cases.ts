@@ -6,6 +6,7 @@ export interface CaseCategoria {
 
 export interface CasePortfolio {
   id: string;
+  codigo?: string | null;
   nome: string;
   imagem_url: string;
   categoria_id: string;

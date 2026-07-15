@@ -16,6 +16,8 @@ export interface Cliente {
   logo_url?: string | null;
   hero_image_url?: string | null;
   categoria_case_id?: string | null;
+  cases_incluir_ids?: string[] | null;
+  cases_excluir_ids?: string[] | null;
   representante_cpf?: string | null;
   representante_email?: string | null;
   endereco_rua?: string | null;

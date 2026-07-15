@@ -5,6 +5,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import { Contrato, Proposta, ContratoAssinaturaEvidencias } from "@/lib/types";
 import {
+  getDescontoInicialLabel,
+  getDescontoMensalidadeLabel,
+  resolvePropostaValoresFinanceiros,
+} from "@/lib/proposta-campos";
+import {
   buildContractContent,
   buildContractContentResolved,
   buildDetalhesFinanceiros,
@@ -155,9 +160,30 @@ export default function ContratosPage() {
     return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   };
 
+  const getCamposForProposta = (proposta?: Proposta) => {
+    if (!proposta?.tipo_servico_id) return undefined;
+    return tiposServico.find((t) => t.id === proposta.tipo_servico_id)?.campos;
+  };
+
+  const getValorInicialContratoLabel = (proposta?: Proposta) => {
+    const campos = getCamposForProposta(proposta);
+    const label = getDescontoInicialLabel(campos).replace(" (%)", "");
+    if (label.includes("valor total")) return "Valor final do projeto (R$)";
+    if (label.includes("setup")) return "Valor final do setup (R$)";
+    return "Valor final inicial (R$)";
+  };
+
+  const getValorRecorrenteContratoLabel = (proposta?: Proposta) => {
+    const campos = getCamposForProposta(proposta);
+    const label = getDescontoMensalidadeLabel(campos).replace(" (%)", "");
+    return `Valor final da ${label.toLowerCase()} (R$)`;
+  };
+
   const getPropostaLabel = (prop: Proposta) => {
     const client = clientes.find((c) => c.id === prop.cliente_id);
-    return `${client ? client.empresa : "Desconhecido"} - Mensalidade: ${formatBRL(prop.mensalidade)}`;
+    const tipo = tiposServico.find((t) => t.id === prop.tipo_servico_id);
+    const resolved = resolvePropostaValoresFinanceiros(prop, tipo?.campos);
+    return `${client ? client.empresa : "Desconhecido"} - Parcela: ${formatBRL(resolved.parcelaFinal)}`;
   };
 
   const selectedProposta = propostas.find((p) => p.id === selectedPropostaId);
@@ -462,6 +488,12 @@ export default function ContratosPage() {
     deleteMutation.mutate(contrato.id);
   };
 
+  const revisaoPropostaAtual = getRevisaoProposta();
+  const revisaoCamposAtual = getCamposForProposta(revisaoPropostaAtual);
+  const revisaoValoresResolvidos = revisaoPropostaAtual
+    ? resolvePropostaValoresFinanceiros(revisaoPropostaAtual, revisaoCamposAtual)
+    : null;
+
   return (
     <div className="flex flex-col gap-6 w-full text-zinc-100">
       {/* Header */}
@@ -707,7 +739,7 @@ export default function ContratosPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="finalSetup">Valor Final Setup (R$)</Label>
+                  <Label htmlFor="finalSetup">{getValorInicialContratoLabel(selectedProposta)}</Label>
                   <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-3 h-9">
                     <DollarSign className="size-4 text-zinc-500" />
                     <input
@@ -721,7 +753,7 @@ export default function ContratosPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="finalMensal">Valor Final Mensalidade (R$)</Label>
+                  <Label htmlFor="finalMensal">{getValorRecorrenteContratoLabel(selectedProposta)}</Label>
                   <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-3 h-9">
                     <DollarSign className="size-4 text-zinc-500" />
                     <input
@@ -848,7 +880,9 @@ export default function ContratosPage() {
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="revisaoSetup">Valor Final Setup (R$)</Label>
+                  <Label htmlFor="revisaoSetup">
+                    {getValorInicialContratoLabel(revisaoPropostaAtual)}
+                  </Label>
                   <Input
                     id="revisaoSetup"
                     type="number"
@@ -859,7 +893,9 @@ export default function ContratosPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="revisaoMensal">Valor Final Mensalidade (R$)</Label>
+                  <Label htmlFor="revisaoMensal">
+                    {getValorRecorrenteContratoLabel(revisaoPropostaAtual)}
+                  </Label>
                   <Input
                     id="revisaoMensal"
                     type="number"
@@ -873,16 +909,22 @@ export default function ContratosPage() {
 
               <div className="border-t border-zinc-800/80 pt-4">
                 <h3 className="text-sm font-semibold text-white mb-3">Condições especiais</h3>
-                {getRevisaoProposta() ? (
+                {revisaoValoresResolvidos ? (
                   <p className="text-xs text-zinc-500 mb-3">
-                    Valores base da proposta: setup{" "}
-                    {formatBRL(getRevisaoProposta()!.setup)} · mensalidade{" "}
-                    {formatBRL(getRevisaoProposta()!.mensalidade)}
+                    Valores base (sem desconto):
+                    {revisaoValoresResolvidos.valorInicialBruto > 0
+                      ? ` ${getDescontoInicialLabel(revisaoCamposAtual).replace(" (%)", "").toLowerCase()} ${formatBRL(revisaoValoresResolvidos.valorInicialBruto)}`
+                      : ""}
+                    {revisaoValoresResolvidos.parcelaBruta > 0
+                      ? ` · ${getDescontoMensalidadeLabel(revisaoCamposAtual).replace(" (%)", "").toLowerCase()} ${formatBRL(revisaoValoresResolvidos.parcelaBruta)}`
+                      : ""}
                   </p>
                 ) : null}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="revisaoDescontoSetup">Desconto no setup (%)</Label>
+                    <Label htmlFor="revisaoDescontoSetup">
+                      {getDescontoInicialLabel(revisaoCamposAtual)}
+                    </Label>
                     <Input
                       id="revisaoDescontoSetup"
                       type="number"
@@ -894,7 +936,9 @@ export default function ContratosPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="revisaoDescontoMensalidade">Desconto mensalidade (%)</Label>
+                    <Label htmlFor="revisaoDescontoMensalidade">
+                      {getDescontoMensalidadeLabel(revisaoCamposAtual)}
+                    </Label>
                     <Input
                       id="revisaoDescontoMensalidade"
                       type="number"

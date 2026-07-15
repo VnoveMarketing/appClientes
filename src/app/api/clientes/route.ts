@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
     estado,
     cor_principal,
     categoria_case_id,
+    cases_incluir_ids,
+    cases_excluir_ids,
   } = body;
 
   if (!nome || !email || !telefone || !empresa) {
@@ -54,6 +56,8 @@ export async function POST(request: NextRequest) {
         estado: estado ?? null,
         cor_principal: cor_principal ?? null,
         categoria_case_id: categoria_case_id ?? null,
+        cases_incluir_ids: Array.isArray(cases_incluir_ids) ? cases_incluir_ids : [],
+        cases_excluir_ids: Array.isArray(cases_excluir_ids) ? cases_excluir_ids : [],
       },
     ])
     .select()

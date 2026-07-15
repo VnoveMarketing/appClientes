@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import type { CasePortfolio } from "@/lib/types";
+import { normalizeCaseCodigo, buildUniqueCaseCodigo, getCaseCodigoErrorMessage, formatCaseCodigoEmUso } from "@/lib/case-codigo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,16 +30,23 @@ export default function CasesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<CasePortfolio | null>(null);
   const [nome, setNome] = useState("");
+  const [codigo, setCodigo] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [link, setLink] = useState("");
   const [ordem, setOrdem] = useState(0);
   const [imagemUrl, setImagemUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [filterCategoria, setFilterCategoria] = useState("all");
+  const [codigoError, setCodigoError] = useState<string | null>(null);
 
   const { data: categorias = [] } = useQuery({
     queryKey: ["case-categorias"],
     queryFn: dbService.getCaseCategorias,
+  });
+
+  const { data: allCases = [] } = useQuery({
+    queryKey: ["cases"],
+    queryFn: () => dbService.getCases(),
   });
 
   const { data: cases = [], isLoading } = useQuery({
@@ -47,10 +55,43 @@ export default function CasesPage() {
       dbService.getCases(filterCategoria === "all" ? undefined : filterCategoria),
   });
 
+  const buildCodigoUnico = (nomeCase: string, excludeId?: string) => {
+    const usados = allCases
+      .filter((item) => item.id !== excludeId && item.codigo)
+      .map((item) => item.codigo as string);
+    return buildUniqueCaseCodigo(nomeCase, usados);
+  };
+
+  const validateCodigoLocal = (value: string, excludeId?: string) => {
+    const normalizado = normalizeCaseCodigo(value);
+    if (!normalizado) {
+      return "Código inválido. Use letras minúsculas, números e hífens (ex.: cli01).";
+    }
+
+    const duplicado = allCases.find(
+      (item) =>
+        item.id !== excludeId &&
+        item.codigo?.trim().toLowerCase() === normalizado
+    );
+
+    if (duplicado) {
+      return formatCaseCodigoEmUso(normalizado, duplicado.nome);
+    }
+
+    return null;
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const codigoNormalizado = normalizeCaseCodigo(codigo);
+      const erroLocal = validateCodigoLocal(codigo, editing?.id);
+      if (erroLocal) {
+        throw new Error(erroLocal);
+      }
+
       const payload = {
         nome: nome.trim(),
+        codigo: codigoNormalizado,
         imagem_url: imagemUrl,
         categoria_id: categoriaId,
         link: link.trim() || null,
@@ -61,7 +102,11 @@ export default function CasesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cases"] });
+      setCodigoError(null);
       setIsModalOpen(false);
+    },
+    onError: (error) => {
+      setCodigoError(getCaseCodigoErrorMessage(error));
     },
   });
 
@@ -73,24 +118,29 @@ export default function CasesPage() {
   const resetForm = () => {
     setEditing(null);
     setNome("");
+    setCodigo("");
     setCategoriaId("");
     setLink("");
     setOrdem(0);
     setImagemUrl("");
+    setCodigoError(null);
   };
 
   const openCreate = () => {
     resetForm();
+    setCodigo(buildCodigoUnico("novo-case"));
     setIsModalOpen(true);
   };
 
   const openEdit = (item: CasePortfolio) => {
     setEditing(item);
     setNome(item.nome);
+    setCodigo(item.codigo ?? "");
     setCategoriaId(item.categoria_id);
     setLink(item.link ?? "");
     setOrdem(item.ordem);
     setImagemUrl(item.imagem_url);
+    setCodigoError(null);
     setIsModalOpen(true);
   };
 
@@ -185,6 +235,18 @@ export default function CasesPage() {
                       <p className="text-xs text-zinc-500">
                         {item.case_categorias?.nome ?? "Sem categoria"}
                       </p>
+                      {item.codigo ? (
+                        <p
+                          className="text-xs text-[#09A3E9] font-mono mt-1 select-all font-semibold"
+                          title="Código do case — use no painel do cliente"
+                        >
+                          {item.codigo}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-amber-400 mt-1">
+                          Sem código — edite para definir (ex.: cli01)
+                        </p>
+                      )}
                     </div>
                     {item.link ? (
                       <a
@@ -234,6 +296,11 @@ export default function CasesPage() {
                 alert("Envie a imagem do case.");
                 return;
               }
+              const erroLocal = validateCodigoLocal(codigo, editing?.id);
+              if (erroLocal) {
+                setCodigoError(erroLocal);
+                return;
+              }
               saveMutation.mutate();
             }}
           >
@@ -246,10 +313,39 @@ export default function CasesPage() {
                 <Input
                   id="case-nome"
                   value={nome}
-                  onChange={(e) => setNome(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setNome(value);
+                    setCodigoError(null);
+                    if (!editing) {
+                      setCodigo(buildCodigoUnico(value || "novo-case"));
+                    }
+                  }}
                   required
                   className="mt-1.5 bg-zinc-900 border-zinc-800 text-white"
                 />
+              </div>
+              <div>
+                <Label htmlFor="case-codigo">Código do case</Label>
+                <Input
+                  id="case-codigo"
+                  value={codigo}
+                  onChange={(e) => {
+                    const value = e.target.value.toLowerCase();
+                    setCodigo(value);
+                    setCodigoError(validateCodigoLocal(value, editing?.id));
+                  }}
+                  placeholder="ex.: cli01, id-cli01"
+                  className="mt-1.5 bg-zinc-900 border-zinc-800 text-white font-mono"
+                />
+                <p className="text-xs text-zinc-500 mt-1">
+                  {editing
+                    ? "Altere apenas se necessário. Códigos duplicados não são permitidos."
+                    : "Gerado automaticamente a partir do nome. Você pode ajustar antes de salvar."}
+                </p>
+                {codigoError ? (
+                  <p className="text-xs text-rose-400 mt-1">{codigoError}</p>
+                ) : null}
               </div>
               <div>
                 <Label>Categoria</Label>
@@ -322,7 +418,11 @@ export default function CasesPage() {
               <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-[#09A3E9] text-white" disabled={saveMutation.isPending}>
+              <Button
+                type="submit"
+                className="bg-[#09A3E9] text-white"
+                disabled={saveMutation.isPending || Boolean(codigoError)}
+              >
                 {saveMutation.isPending ? "Salvando..." : "Salvar"}
               </Button>
             </DialogFooter>

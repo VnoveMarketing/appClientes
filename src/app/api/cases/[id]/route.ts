@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireContratosAccess, jsonResponse, errorResponse } from "@/lib/api/auth";
+import { getCaseCodigoErrorMessage } from "@/lib/case-codigo";
+import { resolveCaseCodigoForSave } from "@/lib/case-codigo-service";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -27,6 +29,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (body.link !== undefined) updates.link = body.link?.trim() || null;
   if (body.ordem !== undefined) updates.ordem = body.ordem;
 
+  if (body.codigo !== undefined) {
+    const { data: current } = await auth.supabase
+      .from("cases")
+      .select("nome")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!current) return errorResponse("Case não encontrado", 404);
+
+    const codigoResolved = await resolveCaseCodigoForSave(auth.supabase, {
+      nome: String(updates.nome ?? current.nome ?? ""),
+      codigo: body.codigo,
+      excludeCaseId: id,
+    });
+
+    if ("error" in codigoResolved) {
+      return errorResponse(codigoResolved.error, 409);
+    }
+
+    updates.codigo = codigoResolved.codigo;
+  }
+
   const { data, error } = await auth.supabase
     .from("cases")
     .update(updates)
@@ -34,7 +58,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     .select("*, case_categorias(id, nome)")
     .single();
 
-  if (error) return errorResponse(error.message, 500);
+  if (error) return errorResponse(getCaseCodigoErrorMessage(error), 500);
   return jsonResponse(data);
 }
 

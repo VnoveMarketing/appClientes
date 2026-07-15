@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatEscopoForContract } from "@/lib/escopo";
 import { renderContractTemplate } from "@/lib/contract-template";
-import { resolveValorInicialComDesconto } from "@/lib/proposta-campos";
+import { resolvePropostaValoresFinanceiros } from "@/lib/proposta-campos";
 import { getPropostaIdentificadorDisplay } from "@/lib/proposta-identificador";
+import type { TipoServicoCampo } from "@/lib/tipos-servico";
 
 /** Converte sequências literais \\n (comum em templates salvos) em quebras de linha reais. */
 export function normalizeContractText(text: string | null | undefined): string {
@@ -48,6 +49,13 @@ export function calcDiscountedValue(val: number, pct: number) {
   return val - (val * pct) / 100;
 }
 
+function resolveValoresContrato(
+  proposta: PropostaForContract,
+  campos?: Array<{ chave: string; tipo_campo: string }>
+) {
+  return resolvePropostaValoresFinanceiros(proposta, campos);
+}
+
 export function buildDetalhesFinanceiros(proposta: PropostaForContract) {
   return proposta.condicao_descricao?.trim()
     ? `Condição especial aplicada: ${proposta.condicao_descricao.trim()}`
@@ -64,17 +72,9 @@ export function buildContractContent(
     valorMensal?: number;
   }
 ) {
-  const discountedSetup =
-    options?.valorSetup ??
-    resolveValorInicialComDesconto(
-      proposta.campos_valores ?? {},
-      proposta.desconto_setup,
-      options?.campos,
-      { setup: proposta.setup }
-    ).valorFinal;
-  const discountedMensal =
-    options?.valorMensal ??
-    calcDiscountedValue(proposta.mensalidade, proposta.desconto_mensalidade);
+  const resolved = resolveValoresContrato(proposta, options?.campos);
+  const discountedSetup = options?.valorSetup ?? resolved.valorFinalSetup;
+  const discountedMensal = options?.valorMensal ?? resolved.valorFinalMensal;
 
   const clientName = cliente.empresa?.trim() || "CONTRATANTE";
   const escopoTexto = formatEscopoForContract(
@@ -83,7 +83,7 @@ export function buildContractContent(
   );
 
   const duracaoTexto =
-    proposta.duracao === 0 ? "prazo indeterminado" : `${proposta.duracao} meses`;
+    resolved.duracao === 0 ? "prazo indeterminado" : `${resolved.duracao} meses`;
 
   return normalizeContractText(
     `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE MARKETING DIGITAL\n\n` +
@@ -122,17 +122,9 @@ export function buildContractContentResolved(
     valorMensal?: number;
   }
 ) {
-  const setup =
-    options?.valorSetup ??
-    resolveValorInicialComDesconto(
-      proposta.campos_valores ?? {},
-      proposta.desconto_setup,
-      options?.campos,
-      { setup: proposta.setup }
-    ).valorFinal;
-  const mensal =
-    options?.valorMensal ??
-    calcDiscountedValue(proposta.mensalidade, proposta.desconto_mensalidade);
+  const resolved = resolveValoresContrato(proposta, options?.campos);
+  const setup = options?.valorSetup ?? resolved.valorFinalSetup;
+  const mensal = options?.valorMensal ?? resolved.valorFinalMensal;
 
   if (options?.template?.trim()) {
     return normalizeContractText(
@@ -150,11 +142,11 @@ export function buildContractContentResolved(
         cep: cliente.cep,
         escopo: proposta.escopo,
         escopo_descricao_adicional: proposta.escopo_descricao_adicional,
-        campos_valores: proposta.campos_valores ?? {},
+        campos_valores: resolved.valoresExibicao,
         campos: options.campos ?? [],
         setup,
         mensalidade: mensal,
-        duracao: proposta.duracao,
+        duracao: resolved.duracao,
         desconto_setup: proposta.desconto_setup,
         desconto_mensalidade: proposta.desconto_mensalidade,
         condicao_descricao: proposta.condicao_descricao,
@@ -200,18 +192,11 @@ export async function buildContractContentFromDb(
 
 export function getContractFinancialValues(
   proposta: PropostaForContract,
-  campos?: { chave: string }[]
+  campos?: Array<{ chave: string; tipo_campo: string }>
 ) {
+  const resolved = resolveValoresContrato(proposta, campos);
   return {
-    valor_final_setup: resolveValorInicialComDesconto(
-      proposta.campos_valores ?? {},
-      proposta.desconto_setup,
-      campos,
-      { setup: proposta.setup }
-    ).valorFinal,
-    valor_final_mensal: calcDiscountedValue(
-      proposta.mensalidade,
-      proposta.desconto_mensalidade
-    ),
+    valor_final_setup: resolved.valorFinalSetup,
+    valor_final_mensal: resolved.valorFinalMensal,
   };
 }

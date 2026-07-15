@@ -6,7 +6,7 @@ import { dbService } from "@/lib/db-service";
 import { Proposta } from "@/lib/types";
 import { normalizeEscopo, type EscopoItemRef } from "@/lib/escopo";
 import { entregaveisToEscopo } from "@/lib/tipos-servico";
-import { syncLegacyFinancialFields, SETUP_DESCRICAO_CHAVE, tipoServicoTemCampoSetup, getDescontoInicialLabel, resolveValorInicialComDesconto } from "@/lib/proposta-campos";
+import { syncLegacyFinancialFields, SETUP_DESCRICAO_CHAVE, tipoServicoTemCampoSetup, getDescontoInicialLabel, getDescontoMensalidadeLabel, resolvePropostaValoresFinanceiros } from "@/lib/proposta-campos";
 import {
   computeCampoCalculado,
   enrichCamposValoresComCalculados,
@@ -295,7 +295,29 @@ export default function PropostasPage() {
   const formatBRL = (val: number) =>
     val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  const calcDiscount = (val: number, pct: number) => val - (val * pct) / 100;
+  const previewValores = useMemo(() => {
+    if (!selectedTipo) return null;
+
+    const camposNumericos = enrichCamposValoresComCalculados(
+      selectedTipo.campos ?? [],
+      Object.fromEntries(
+        Object.entries(camposValores).map(([k, v]) => [k, v === "" ? null : Number(v) || v])
+      )
+    );
+    const financial = syncLegacyFinancialFields(camposNumericos);
+
+    return resolvePropostaValoresFinanceiros(
+      {
+        setup: financial.setup,
+        mensalidade: financial.mensalidade,
+        desconto_setup: parseFloat(descontoSetup) || 0,
+        desconto_mensalidade: parseFloat(descontoMensalidade) || 0,
+        duracao: financial.duracao,
+        campos_valores: camposNumericos,
+      },
+      selectedTipo.campos
+    );
+  }, [selectedTipo, camposValores, descontoSetup, descontoMensalidade]);
 
   const getTipoNome = (id?: string | null) =>
     tiposServico.find((t) => t.id === id)?.nome ?? "—";
@@ -357,13 +379,8 @@ export default function PropostasPage() {
                 {propostas.map((proposta) => {
                   const client = clientes.find((c) => c.id === proposta.cliente_id);
                   const tipo = tiposServico.find((t) => t.id === proposta.tipo_servico_id);
-                  const valorInicial = resolveValorInicialComDesconto(
-                    proposta.campos_valores ?? {},
-                    proposta.desconto_setup,
-                    tipo?.campos,
-                    { setup: proposta.setup }
-                  );
-                  const isSetupIsento = proposta.desconto_setup === 100;
+                  const resolved = resolvePropostaValoresFinanceiros(proposta, tipo?.campos);
+                  const isSetupIsento = resolved.isSetupIsento;
 
                   return (
                     <TableRow
@@ -378,9 +395,7 @@ export default function PropostasPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-emerald-400 font-bold">
-                          {formatBRL(
-                            calcDiscount(proposta.mensalidade, proposta.desconto_mensalidade)
-                          )}
+                          {formatBRL(resolved.parcelaFinal)}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -388,9 +403,9 @@ export default function PropostasPage() {
                           <span className="text-zinc-400 font-medium text-xs bg-zinc-800 border border-zinc-700/80 px-2 py-0.5 rounded w-fit">
                             ISENTO
                           </span>
-                        ) : valorInicial.valorBruto > 0 ? (
+                        ) : resolved.valorInicialBruto > 0 ? (
                           <span className="font-semibold text-zinc-300">
-                            {formatBRL(valorInicial.valorFinal)}
+                            {formatBRL(resolved.valorInicialFinal)}
                           </span>
                         ) : (
                           <span className="text-zinc-500 text-xs">—</span>
@@ -553,13 +568,29 @@ export default function PropostasPage() {
                                 .sort((a, b) => a.ordem - b.ordem)
                                 .map((campo) => {
                                 if (campo.tipo_campo === "calculated") {
-                                  const valor = computeCampoCalculado(campo, camposValores);
+                                  const valorExibicao = previewValores?.valoresExibicao[campo.chave];
+                                  const valor =
+                                    valorExibicao != null && valorExibicao !== ""
+                                      ? Number(valorExibicao)
+                                      : computeCampoCalculado(campo, camposValores);
+                                  const temDesconto =
+                                    (parseFloat(descontoSetup) || 0) > 0 ||
+                                    (parseFloat(descontoMensalidade) || 0) > 0;
+                                  const valorBruto = computeCampoCalculado(campo, camposValores);
                                   return (
                                     <div key={campo.chave} className="flex flex-col gap-1.5">
                                       <Label>{campo.label}</Label>
                                       <div className="h-9 flex items-center px-3 rounded-lg border border-[#09A3E9]/30 bg-[#09A3E9]/5 text-[#09A3E9] font-semibold text-sm">
                                         {formatCalculatedCurrency(valor)}
                                       </div>
+                                      {temDesconto &&
+                                      valorBruto != null &&
+                                      valor != null &&
+                                      valorBruto !== valor ? (
+                                        <span className="text-[10px] text-zinc-500 line-through">
+                                          Bruto: {formatCalculatedCurrency(valorBruto)}
+                                        </span>
+                                      ) : null}
                                       <span className="text-[10px] text-zinc-500">
                                         Calculado automaticamente
                                         {campo.calculo?.operacao === "multiply"
@@ -635,7 +666,7 @@ export default function PropostasPage() {
                                 />
                               </div>
                               <div className="flex flex-col gap-1.5">
-                                <Label>Desconto mensalidade (%)</Label>
+                                <Label>{getDescontoMensalidadeLabel(selectedTipo.campos)}</Label>
                                 <Input
                                   type="number"
                                   min="0"
@@ -655,6 +686,32 @@ export default function PropostasPage() {
                                 />
                               </div>
                             </div>
+                            {previewValores &&
+                            ((parseFloat(descontoSetup) || 0) > 0 ||
+                              (parseFloat(descontoMensalidade) || 0) > 0) ? (
+                              <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400">
+                                <span className="font-medium text-zinc-300">Prévia com descontos: </span>
+                                {previewValores.valorInicialBruto > 0 ? (
+                                  <>
+                                    {getDescontoInicialLabel(selectedTipo.campos).replace(" (%)", "")}{" "}
+                                    {formatBRL(previewValores.valorInicialFinal)}
+                                  </>
+                                ) : null}
+                                {previewValores.parcelaFinal > 0 ? (
+                                  <>
+                                    {previewValores.valorInicialBruto > 0 ? " · " : null}
+                                    {getDescontoMensalidadeLabel(selectedTipo.campos).replace(" (%)", "")}{" "}
+                                    {formatBRL(previewValores.parcelaFinal)}
+                                  </>
+                                ) : null}
+                                {previewValores.duracao > 0 && previewValores.parcelaFinal > 0 ? (
+                                  <>
+                                    {" "}
+                                    · total do contrato {formatBRL(previewValores.valorTotalContrato)}
+                                  </>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
         
                           <div className="border-t border-zinc-800/80 pt-3">

@@ -1,8 +1,15 @@
 import { NextRequest } from "next/server";
 import { jsonResponse, errorResponse } from "@/lib/api/auth";
 import { getAdminSupabase } from "@/lib/api/admin-db";
+import {
+  mergeClienteCases,
+  normalizeClienteCaseIds,
+  type CaseExibicao,
+} from "@/lib/cliente-cases";
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+const CASE_SELECT = "id, nome, imagem_url, link, ordem, categoria_id";
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
@@ -25,19 +32,39 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .eq("id", proposta.cliente_id)
       .maybeSingle();
 
-    let cases: unknown[] = [];
     const categoriaCaseId = clientes?.categoria_case_id as string | null | undefined;
+    const incluirIds = normalizeClienteCaseIds(
+      clientes?.cases_incluir_ids as string[] | null | undefined
+    );
+    const excluirIds = normalizeClienteCaseIds(
+      clientes?.cases_excluir_ids as string[] | null | undefined
+    );
+
+    let categoriaCases: CaseExibicao[] = [];
 
     if (categoriaCaseId) {
       const { data: casesData } = await supabase
         .from("cases")
-        .select("id, nome, imagem_url, link, ordem")
+        .select(CASE_SELECT)
         .eq("categoria_id", categoriaCaseId)
         .order("ordem")
         .order("created_at", { ascending: false });
 
-      cases = casesData ?? [];
+      categoriaCases = (casesData ?? []) as CaseExibicao[];
     }
+
+    let includedCases: CaseExibicao[] = [];
+
+    if (incluirIds.length > 0) {
+      const { data: extraCases } = await supabase
+        .from("cases")
+        .select(CASE_SELECT)
+        .in("id", incluirIds);
+
+      includedCases = (extraCases ?? []) as CaseExibicao[];
+    }
+
+    const cases = mergeClienteCases(categoriaCases, includedCases, excluirIds);
 
     let tipoServico: Record<string, unknown> | null = null;
     const tipoServicoId = proposta.tipo_servico_id as string | null | undefined;

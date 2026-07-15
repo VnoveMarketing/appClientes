@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { dbService } from "@/lib/db-service";
 import { Cliente } from "@/lib/types";
@@ -53,6 +53,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { normalizeHexColor } from "@/lib/cases";
+import {
+  formatCaseRefsForInput,
+  mergeClienteCases,
+  parseCaseRefsInput,
+  resolveCaseRefsToUuids,
+  findUnknownCaseRefs,
+  type CaseExibicao,
+} from "@/lib/cliente-cases";
 
 export default function ClientesPage() {
   const queryClient = useQueryClient();
@@ -72,6 +80,8 @@ export default function ClientesPage() {
   const [empresa, setEmpresa] = useState("");
   const [corPrincipal, setCorPrincipal] = useState("#666666");
   const [categoriaCaseId, setCategoriaCaseId] = useState("");
+  const [casesIncluirInput, setCasesIncluirInput] = useState("");
+  const [casesExcluirInput, setCasesExcluirInput] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [heroFile, setHeroFile] = useState<File | null>(null);
@@ -99,6 +109,11 @@ export default function ClientesPage() {
   const { data: caseCategorias = [] } = useQuery({
     queryKey: ["case-categorias"],
     queryFn: dbService.getCaseCategorias,
+  });
+
+  const { data: allCases = [] } = useQuery({
+    queryKey: ["cases"],
+    queryFn: () => dbService.getCases(),
   });
 
   // Mutations
@@ -129,6 +144,8 @@ export default function ClientesPage() {
     setEmpresa("");
     setCorPrincipal("#666666");
     setCategoriaCaseId("");
+    setCasesIncluirInput("");
+    setCasesExcluirInput("");
     setLogoFile(null);
     setLogoPreview(null);
     setHeroFile(null);
@@ -150,6 +167,8 @@ export default function ClientesPage() {
     setEmpresa(cliente.empresa || "");
     setCorPrincipal(cliente.cor_principal ?? "#666666");
     setCategoriaCaseId(cliente.categoria_case_id ?? "");
+    setCasesIncluirInput(formatCaseRefsForInput(cliente.cases_incluir_ids, allCases));
+    setCasesExcluirInput(formatCaseRefsForInput(cliente.cases_excluir_ids, allCases));
     setLogoFile(null);
     setLogoPreview(cliente.logo_url ?? null);
     setHeroFile(null);
@@ -173,6 +192,14 @@ export default function ClientesPage() {
       empresa,
       cor_principal: corNormalizada,
       categoria_case_id: categoriaCaseId || null,
+      cases_incluir_ids: resolveCaseRefsToUuids(
+        parseCaseRefsInput(casesIncluirInput),
+        allCases
+      ),
+      cases_excluir_ids: resolveCaseRefsToUuids(
+        parseCaseRefsInput(casesExcluirInput),
+        allCases
+      ),
       status: (selectedCliente ? selectedCliente.status : "Ativa") as Cliente["status"],
       assinatura: (selectedCliente ? selectedCliente.assinatura : "active") as Cliente["assinatura"],
     };
@@ -244,6 +271,53 @@ export default function ClientesPage() {
     categoriaCaseId === ""
       ? null
       : caseCategorias.find((cat) => cat.id === categoriaCaseId)?.nome ?? null;
+
+  const casesPreview = useMemo(() => {
+    const incluirRefs = parseCaseRefsInput(casesIncluirInput);
+    const excluirRefs = parseCaseRefsInput(casesExcluirInput);
+    const incluirIds = resolveCaseRefsToUuids(incluirRefs, allCases);
+    const excluirIds = resolveCaseRefsToUuids(excluirRefs, allCases);
+
+    const categoriaCases: CaseExibicao[] = categoriaCaseId
+      ? allCases
+          .filter((item) => item.categoria_id === categoriaCaseId)
+          .map((item) => ({
+            id: item.id,
+            nome: item.nome,
+            imagem_url: item.imagem_url,
+            link: item.link,
+            ordem: item.ordem,
+          }))
+      : [];
+
+    const includedCases: CaseExibicao[] = allCases
+      .filter((item) => incluirIds.includes(item.id))
+      .map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        imagem_url: item.imagem_url,
+        link: item.link,
+        ordem: item.ordem,
+      }));
+
+    return mergeClienteCases(categoriaCases, includedCases, excluirIds);
+  }, [allCases, categoriaCaseId, casesIncluirInput, casesExcluirInput]);
+
+  const invalidIncluirIds = useMemo(
+    () => findUnknownCaseRefs(parseCaseRefsInput(casesIncluirInput), allCases),
+    [allCases, casesIncluirInput]
+  );
+
+  const invalidExcluirIds = useMemo(
+    () => findUnknownCaseRefs(parseCaseRefsInput(casesExcluirInput), allCases),
+    [allCases, casesExcluirInput]
+  );
+
+  useEffect(() => {
+    if (!selectedCliente || !isModalOpen || allCases.length === 0) return;
+    setCasesIncluirInput(formatCaseRefsForInput(selectedCliente.cases_incluir_ids, allCases));
+    setCasesExcluirInput(formatCaseRefsForInput(selectedCliente.cases_excluir_ids, allCases));
+  }, [selectedCliente?.id, allCases.length, isModalOpen]);
 
   const filteredClientes = clientes.filter((c) => {
     const term = filterText.toLowerCase();
@@ -505,188 +579,261 @@ export default function ClientesPage() {
 
       {/* Add/Edit Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen} preventOutsideDismiss>
-        <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-(--container-lg)">
-          <form onSubmit={handleSubmit}>
-            <DialogHeader>
+        <DialogContent className="bg-[#161616] border border-zinc-800 text-white sm:max-w-3xl max-h-[min(92vh,880px)] flex flex-col overflow-hidden p-0 gap-0">
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <DialogHeader className="shrink-0 border-b border-zinc-800/80 px-6 py-4">
               <DialogTitle className="text-lg font-bold text-white">
                 {selectedCliente ? "Editar Cliente" : "Adicionar Novo Cliente"}
               </DialogTitle>
               <DialogDescription className="text-zinc-400 text-sm">
-                Preencha os dados para cadastrar um novo cliente.
+                Dados do contato, portfólio de cases e identidade visual da proposta.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="nome">Nome</Label>
-                  <Input
-                    id="nome"
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    required
-                    placeholder="Nome"
-                    className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sobrenome">Sobrenome</Label>
-                  <Input
-                    id="sobrenome"
-                    value={sobrenome}
-                    onChange={(e) => setSobrenome(e.target.value)}
-                    required
-                    placeholder="Sobrenome"
-                    className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="email">Email do Dono</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="exemplo@empresa.com"
-                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="telefone">Telefone</Label>
-                <Input
-                  id="telefone"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  required
-                  placeholder="(00) 00000-0000"
-                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="empresa">Nome da Empresa</Label>
-                <Input
-                  id="empresa"
-                  value={empresa}
-                  onChange={(e) => setEmpresa(e.target.value)}
-                  required
-                  placeholder="Nome Fantasia / Razão Social"
-                  className="bg-zinc-900 border-zinc-800 text-white text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="cor-principal">Cor principal</Label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="cor-principal-picker"
-                      type="color"
-                      value={normalizeHexColor(corPrincipal) ?? "#666666"}
-                      onChange={(e) => setCorPrincipal(e.target.value.toUpperCase())}
-                      className="h-10 w-12 rounded border border-zinc-800 bg-zinc-900 cursor-pointer"
-                    />
-                    <Input
-                      id="cor-principal"
-                      value={corPrincipal}
-                      onChange={(e) => setCorPrincipal(e.target.value)}
-                      placeholder="#RRGGBB"
-                      className="bg-zinc-900 border-zinc-800 text-white text-sm font-mono"
-                    />
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+              <div className="grid gap-5">
+                <section className="space-y-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                    Contato
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="nome">Nome</Label>
+                      <Input
+                        id="nome"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        required
+                        placeholder="Nome"
+                        className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="sobrenome">Sobrenome</Label>
+                      <Input
+                        id="sobrenome"
+                        value={sobrenome}
+                        onChange={(e) => setSobrenome(e.target.value)}
+                        required
+                        placeholder="Sobrenome"
+                        className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="email">E-mail do dono</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        placeholder="exemplo@empresa.com"
+                        className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="telefone">Telefone</Label>
+                      <Input
+                        id="telefone"
+                        value={telefone}
+                        onChange={(e) => setTelefone(e.target.value)}
+                        required
+                        placeholder="(00) 00000-0000"
+                        className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Categoria de cases</Label>
-                  <Select
-                    value={categoriaCaseId || "none"}
-                    onValueChange={(v) => setCategoriaCaseId(!v || v === "none" ? "" : v)}
-                  >
-                    <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white text-sm">
-                      <SelectValue placeholder="Selecione">
-                        {categoriaCaseId === "" ? null : categoriaCaseLabel}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#1c1c1e] border-zinc-800 text-zinc-200">
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {caseCategorias.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                </section>
 
-              <div className="flex flex-col gap-1.5">
-                <Label>Imagem de fundo da proposta</Label>
-                <p className="text-xs text-zinc-500">
-                  Usada na hero section da proposta comercial (PNG, JPG ou WEBP).
-                </p>
-                <input
-                  ref={heroInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  className="hidden"
-                  onChange={(e) => handleHeroChange(e.target.files?.[0])}
-                />
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-zinc-700 text-zinc-300"
-                    onClick={() => openFilePicker(heroInputRef.current)}
-                  >
-                    <ImageIcon className="size-4 mr-2" />
-                    {heroPreview ? "Trocar imagem" : "Enviar imagem"}
-                  </Button>
-                  {heroPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={heroPreview}
-                      alt="Imagem de fundo da proposta"
-                      className="h-16 w-28 object-cover rounded border border-zinc-800"
-                    />
-                  ) : null}
-                </div>
-              </div>
+                <section className="space-y-3 border-t border-zinc-800/80 pt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                    Empresa e proposta
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5 sm:col-span-2">
+                      <Label htmlFor="empresa">Nome da empresa</Label>
+                      <Input
+                        id="empresa"
+                        value={empresa}
+                        onChange={(e) => setEmpresa(e.target.value)}
+                        required
+                        placeholder="Nome fantasia / razão social"
+                        className="bg-zinc-900 border-zinc-800 text-white text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="cor-principal">Cor principal</Label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="cor-principal-picker"
+                          type="color"
+                          value={normalizeHexColor(corPrincipal) ?? "#666666"}
+                          onChange={(e) => setCorPrincipal(e.target.value.toUpperCase())}
+                          className="h-10 w-12 shrink-0 rounded border border-zinc-800 bg-zinc-900 cursor-pointer"
+                        />
+                        <Input
+                          id="cor-principal"
+                          value={corPrincipal}
+                          onChange={(e) => setCorPrincipal(e.target.value)}
+                          placeholder="#RRGGBB"
+                          className="bg-zinc-900 border-zinc-800 text-white text-sm font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Categoria de cases</Label>
+                      <Select
+                        value={categoriaCaseId || "none"}
+                        onValueChange={(v) => setCategoriaCaseId(!v || v === "none" ? "" : v)}
+                      >
+                        <SelectTrigger className="bg-zinc-900 border-zinc-800 text-white text-sm">
+                          <SelectValue placeholder="Selecione">
+                            {categoriaCaseId === "" ? null : categoriaCaseLabel}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#1c1c1e] border-zinc-800 text-zinc-200">
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {caseCategorias.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </section>
 
-              <div className="flex flex-col gap-1.5">
-                <Label>Logo do cliente (PNG)</Label>
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/png"
-                  className="hidden"
-                  onChange={(e) => handleLogoChange(e.target.files?.[0])}
-                />
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-zinc-700 text-zinc-300"
-                    onClick={() => openFilePicker(logoInputRef.current)}
-                  >
-                    <ImageIcon className="size-4 mr-2" />
-                    {logoPreview ? "Trocar logo" : "Enviar logo"}
-                  </Button>
-                  {logoPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={logoPreview}
-                      alt="Logo do cliente"
-                      className="h-12 max-w-[120px] object-contain rounded border border-zinc-800 bg-zinc-950 px-2"
-                    />
-                  ) : null}
-                </div>
+                <section className="space-y-3 border-t border-zinc-800/80 pt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                    Cases na proposta
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="cases-incluir">Incluir por código</Label>
+                      <Input
+                        id="cases-incluir"
+                        value={casesIncluirInput}
+                        onChange={(e) => setCasesIncluirInput(e.target.value)}
+                        placeholder="cli01, cli02"
+                        className="bg-zinc-900 border-zinc-800 text-white text-sm font-mono"
+                      />
+                      {invalidIncluirIds.length > 0 ? (
+                        <p className="text-xs text-amber-400">
+                          Não encontrado: {invalidIncluirIds.join(", ")}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-zinc-500">Extras além da categoria.</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="cases-excluir">Ocultar por código</Label>
+                      <Input
+                        id="cases-excluir"
+                        value={casesExcluirInput}
+                        onChange={(e) => setCasesExcluirInput(e.target.value)}
+                        placeholder="cli03, cli04"
+                        className="bg-zinc-900 border-zinc-800 text-white text-sm font-mono"
+                      />
+                      {invalidExcluirIds.length > 0 ? (
+                        <p className="text-xs text-amber-400">
+                          Não encontrado: {invalidExcluirIds.join(", ")}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-zinc-500">Remove cases da exibição.</p>
+                      )}
+                    </div>
+                    {(categoriaCaseId || casesIncluirInput.trim() || casesExcluirInput.trim()) && (
+                      <div className="sm:col-span-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2">
+                        <p className="text-xs font-medium text-zinc-300">
+                          Prévia: {casesPreview.length}{" "}
+                          {casesPreview.length === 1 ? "case" : "cases"}
+                        </p>
+                        <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">
+                          {casesPreview.length === 0
+                            ? "Nenhum case será exibido."
+                            : casesPreview.map((item) => item.nome).join(" · ")}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="space-y-3 border-t border-zinc-800/80 pt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                    Identidade visual
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-3">
+                      <Label>Imagem de fundo</Label>
+                      <p className="text-[11px] text-zinc-500 leading-snug">
+                        Hero da proposta (PNG, JPG ou WEBP).
+                      </p>
+                      <input
+                        ref={heroInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                        className="hidden"
+                        onChange={(e) => handleHeroChange(e.target.files?.[0])}
+                      />
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-zinc-700 text-zinc-300"
+                          onClick={() => openFilePicker(heroInputRef.current)}
+                        >
+                          <ImageIcon className="size-4 mr-1.5" />
+                          {heroPreview ? "Trocar" : "Enviar"}
+                        </Button>
+                        {heroPreview ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={heroPreview}
+                            alt="Imagem de fundo"
+                            className="h-14 w-24 object-cover rounded border border-zinc-800"
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-3">
+                      <Label>Logo do cliente</Label>
+                      <p className="text-[11px] text-zinc-500 leading-snug">Arquivo PNG.</p>
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => handleLogoChange(e.target.files?.[0])}
+                      />
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-zinc-700 text-zinc-300"
+                          onClick={() => openFilePicker(logoInputRef.current)}
+                        >
+                          <ImageIcon className="size-4 mr-1.5" />
+                          {logoPreview ? "Trocar" : "Enviar"}
+                        </Button>
+                        {logoPreview ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={logoPreview}
+                            alt="Logo do cliente"
+                            className="h-12 max-w-[100px] object-contain rounded border border-zinc-800 bg-zinc-950 px-2"
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>
             </div>
 
-            <DialogFooter className="mt-4">
+            <DialogFooter className="shrink-0 mt-0 border-t border-zinc-800/80 bg-[#161616] px-6 py-4">
               <Button
                 type="button"
                 variant="ghost"

@@ -1,6 +1,8 @@
-import { calcDiscountedValue } from "@/lib/contract-builder";
-import { enrichCamposValoresComCalculados } from "@/lib/campo-calculado";
-import { syncLegacyFinancialFields, getSetupDescricao, resolveValorInicialComDesconto, tipoServicoTemCampoSetup, tipoServicoTemCampoValorTotal } from "@/lib/proposta-campos";
+import {
+  getSetupDescricao,
+  resolvePropostaValoresFinanceiros,
+  type PropostaFinanceiraInput,
+} from "@/lib/proposta-campos";
 import type { TipoServico, TipoServicoCampo } from "@/lib/tipos-servico";
 
 export type PropostaInvestCard = {
@@ -28,14 +30,7 @@ export type PropostaInvestimentoView = {
   valorTotalContrato: number;
 };
 
-type PropostaInvestSource = {
-  setup: number;
-  mensalidade: number;
-  desconto_setup: number;
-  desconto_mensalidade: number;
-  duracao: number;
-  campos_valores?: Record<string, string | number | null> | null;
-};
+type PropostaInvestSource = PropostaFinanceiraInput;
 
 const SETUP_DETAIL =
   "Onboarding, criação de canais, parametrização e treinamento de equipe.";
@@ -63,80 +58,35 @@ export function buildPropostaInvestimento(
   const tipoDescricao = tipoServico?.descricao?.trim() ?? "";
   const campos = [...(tipoServico?.campos ?? [])].sort((a, b) => a.ordem - b.ordem);
 
-  const valores = enrichCamposValoresComCalculados(
-    campos,
-    proposta.campos_valores ?? {}
-  ) as Record<string, string | number | null>;
+  const resolved = resolvePropostaValoresFinanceiros(proposta, campos);
+  const valores = resolved.valoresBrutos;
 
-  const financial = syncLegacyFinancialFields(valores, {
-    setup: proposta.setup,
-    mensalidade: proposta.mensalidade,
-    duracao: proposta.duracao,
-  });
-
-  const { valorBruto: valorInicialBruto, valorFinal: valorInicialFinal } =
-    resolveValorInicialComDesconto(valores, proposta.desconto_setup, campos, {
-      setup: proposta.setup,
-      valor_total: financial.valor_total,
-    });
-
-  const finalMensal = calcDiscountedValue(
-    proposta.mensalidade,
-    proposta.desconto_mensalidade
-  );
-
-  const duracao =
-    proposta.duracao > 0
-      ? proposta.duracao
-      : Number(valores.numero_parcelas ?? valores.tempo_recorrencia ?? 0);
-
-  const valorTotalInformado = getCampoAmount(valores, "valor_total") || financial.valor_total;
-  const temCampoSetup = tipoServicoTemCampoSetup(campos);
-  const temCampoValorTotal = tipoServicoTemCampoValorTotal(campos);
-  const hasSetup = temCampoSetup && (valorInicialBruto > 0 || proposta.setup > 0);
-  const hasValorTotalInicial =
-    !temCampoSetup && temCampoValorTotal && valorInicialBruto > 0;
-  const hasMensal =
-    proposta.mensalidade > 0 ||
-    getCampoAmount(valores, "mensalidade") > 0 ||
-    getCampoAmount(valores, "valor_parcela") > 0;
+  const {
+    valorInicialBruto,
+    valorInicialFinal,
+    valorTotalInformado,
+    parcelaFinal: finalMensal,
+    parcelaAntesDescontoParcela,
+    duracao,
+    valorTotalContrato,
+    hasSetup,
+    hasValorTotalInicial,
+    hasMensal,
+    isSetupIsento,
+  } = resolved;
 
   const campoSetup = findCampo(campos, "setup");
   const campoMensal =
     findCampo(campos, "mensalidade") ?? findCampo(campos, "valor_parcela");
   const campoValorTotal = findCampo(campos, "valor_total");
   const campoParcelas =
-    findCampo(campos, "numero_parcelas") ?? findCampo(campos, "tempo_recorrencia");
+    findCampo(campos, "tempo_recorrencia") ??
+    findCampo(campos, "valor_recorrencia") ??
+    findCampo(campos, "numero_parcelas");
 
   const isParcelaPrincipal = campoMensal?.chave === "valor_parcela";
   const duracaoLabel =
     duracao === 0 ? "Prazo indeterminado" : `${duracao} ${duracao === 1 ? "mês" : "meses"}`;
-
-  const isContratoComSetupSeparado = hasSetup && hasMensal;
-  const isFeeMensal = hasValorTotalInicial && hasMensal;
-  const temDesconto =
-    proposta.desconto_setup > 0 || proposta.desconto_mensalidade > 0;
-
-  let valorTotalContrato: number;
-
-  if (isContratoComSetupSeparado) {
-    // Projeto Único: setup + parcelas (valor_total não inclui o setup).
-    valorTotalContrato =
-      valorInicialFinal + (duracao > 0 ? finalMensal * duracao : 0);
-  } else if (isFeeMensal) {
-    // Fee Mensal: valor_total já representa o total do contrato.
-    valorTotalContrato = valorInicialFinal;
-  } else if (hasMensal && duracao > 0) {
-    valorTotalContrato = temDesconto
-      ? finalMensal * duracao
-      : valorTotalInformado > 0
-        ? valorTotalInformado
-        : finalMensal * duracao;
-  } else if (valorTotalInformado > 0) {
-    valorTotalContrato = hasValorTotalInicial ? valorInicialFinal : valorTotalInformado;
-  } else {
-    valorTotalContrato = valorInicialFinal;
-  }
 
   let secondaryCard: PropostaInvestCard | null = null;
 
@@ -149,7 +99,7 @@ export function buildPropostaInvestimento(
       amount: valorInicialFinal,
       originalAmount: proposta.desconto_setup > 0 ? valorInicialBruto : undefined,
       discountPct: proposta.desconto_setup,
-      isExempt: proposta.desconto_setup === 100,
+      isExempt: isSetupIsento,
     };
   } else if (hasValorTotalInicial && hasMensal) {
     secondaryCard = {
@@ -190,6 +140,14 @@ export function buildPropostaInvestimento(
   let primaryCard: PropostaInvestCard;
 
   if (hasMensal) {
+    let parcelaOriginal: number | undefined;
+    let descontoParcelaPct: number | undefined;
+
+    if (proposta.desconto_mensalidade > 0) {
+      parcelaOriginal = parcelaAntesDescontoParcela;
+      descontoParcelaPct = proposta.desconto_mensalidade;
+    }
+
     primaryCard = {
       label: isParcelaPrincipal ? "Pagamento parcelado" : "Recorrência mensal",
       title:
@@ -200,9 +158,8 @@ export function buildPropostaInvestimento(
           ? `Pagamento em ${duracao} parcelas conforme cronograma do projeto.`
           : RECORRENTE_DETAIL,
       amount: finalMensal,
-      originalAmount:
-        proposta.desconto_mensalidade > 0 ? proposta.mensalidade : undefined,
-      discountPct: proposta.desconto_mensalidade,
+      originalAmount: parcelaOriginal,
+      discountPct: descontoParcelaPct,
       suffix: isParcelaPrincipal ? "/parcela" : "/mês",
     };
   } else if (valorTotalInformado > 0) {
@@ -235,7 +192,7 @@ export function buildPropostaInvestimento(
   if (hasSetup && valorInicialBruto > 0) {
     resumo.push({
       key: "Setup final",
-      value: proposta.desconto_setup === 100 ? "Isento" : formatCurrency(valorInicialFinal),
+      value: isSetupIsento ? "Isento" : formatCurrency(valorInicialFinal),
     });
   } else if (hasValorTotalInicial) {
     resumo.push({

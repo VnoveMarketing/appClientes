@@ -123,6 +123,7 @@ export const apiClient = {
     categoria_id: string;
     link?: string | null;
     ordem?: number;
+    codigo?: string | null;
   }): Promise<CasePortfolio> =>
     apiFetch("/api/cases", { method: "POST", body: JSON.stringify(payload) }),
 
@@ -134,6 +135,7 @@ export const apiClient = {
       categoria_id: string;
       link: string | null;
       ordem: number;
+      codigo: string | null;
     }>
   ): Promise<CasePortfolio> =>
     apiFetch(`/api/cases/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

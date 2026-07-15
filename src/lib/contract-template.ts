@@ -66,8 +66,6 @@ export function renderContractTemplate(template: string, ctx: TemplateContext) {
       setup: ctx.setup,
       mensalidade: ctx.mensalidade,
       duracao: ctx.duracao,
-      desconto_setup: ctx.desconto_setup,
-      desconto_mensalidade: ctx.desconto_mensalidade,
     }
   );
 
@@ -98,8 +96,21 @@ export function renderContractTemplate(template: string, ctx: TemplateContext) {
   };
 
   for (const [chave, valor] of Object.entries(ctx.campos_valores ?? {})) {
-    replacements[`{{campo.${chave}}}`] =
-      valor === null || valor === undefined ? "—" : String(valor);
+    const campo = (ctx.campos ?? []).find((c) => c.chave === chave);
+    if (valor === null || valor === undefined) {
+      replacements[`{{campo.${chave}}}`] = "—";
+      continue;
+    }
+    if (
+      typeof valor === "number" &&
+      (campo?.tipo_campo === "currency" || campo?.tipo_campo === "calculated")
+    ) {
+      replacements[`{{campo.${chave}}}`] = valor.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+      });
+      continue;
+    }
+    replacements[`{{campo.${chave}}}`] = String(valor);
   }
 
   let output = template;

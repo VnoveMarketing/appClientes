@@ -5,6 +5,8 @@ import {
   jsonResponse,
   errorResponse,
 } from "@/lib/api/auth";
+import { getCaseCodigoErrorMessage } from "@/lib/case-codigo";
+import { resolveCaseCodigoForSave } from "@/lib/case-codigo-service";
 
 export async function GET(request: NextRequest) {
   const auth = await requirePropostasAccess();
@@ -32,11 +34,20 @@ export async function POST(request: NextRequest) {
   if ("error" in auth) return auth.error;
 
   const body = await request.json();
-  const { nome, imagem_url, categoria_id, link, ordem } = body;
+  const { nome, imagem_url, categoria_id, link, ordem, codigo } = body;
 
   if (!nome?.trim()) return errorResponse("Nome do case é obrigatório");
   if (!imagem_url?.trim()) return errorResponse("Imagem do case é obrigatória");
   if (!categoria_id) return errorResponse("Categoria é obrigatória");
+
+  const codigoResolved = await resolveCaseCodigoForSave(auth.supabase, {
+    nome: nome.trim(),
+    codigo,
+  });
+
+  if ("error" in codigoResolved) {
+    return errorResponse(codigoResolved.error, 409);
+  }
 
   const { data, error } = await auth.supabase
     .from("cases")
@@ -47,11 +58,12 @@ export async function POST(request: NextRequest) {
         categoria_id,
         link: link?.trim() || null,
         ordem: typeof ordem === "number" ? ordem : 0,
+        codigo: codigoResolved.codigo,
       },
     ])
     .select("*, case_categorias(id, nome)")
     .single();
 
-  if (error) return errorResponse(error.message, 500);
+  if (error) return errorResponse(getCaseCodigoErrorMessage(error), 500);
   return jsonResponse(data, 201);
 }
